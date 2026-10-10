@@ -60,13 +60,18 @@ Never import from `lesson-code/` and never add it to `sys.path`. The repo has to
    Langfuse callback on the compiled graph, and call `flush()` before the process exits. No
    test catches a missing callback, which is why this rule lives here.
 3. Authorization, approvals and idempotency are enforced inside the MCP server, never by a
-   prompt and never by a graph node alone. The model never sees a tool that records an approval
-   decision. `record_approval_decision` is called by application code only.
+   prompt and never by a graph node alone. Gated writes require a recorded approval;
+   `request_approval` only creates a pending row and is idempotent (rules in
+   `mcp_server/CLAUDE.md`). The model never sees a tool that records an approval decision.
+   `record_approval_decision` is called by application code only.
 4. The checkpointer is durable. `InMemorySaver` and `MemorySaver` are banned everywhere, tests
    included. Tests use `AsyncSqliteSaver` on a temporary file.
-5. `caller_id` and `user_group` are inputs to `run_turn()` and travel in graph config. The tool
-   wrapper injects them into MCP calls. They are never parsed from message text and never
-   appear in a tool schema the model sees.
+5. The entry point is
+   `run_turn(message, *, caller_id, user_group, thread_id, request_id=None)`. `caller_id`,
+   `user_group` and `request_id` travel in graph config, and the tool wrapper injects them into
+   MCP calls. They are never parsed from message text and never appear in a tool schema the
+   model sees. `run_turn()` creates `request_id` when the caller passes none, and a resume
+   reuses the one stored in the checkpoint (details in `agent/CLAUDE.md`).
 6. Develop against `GOLDEN-DATASETS.json` only. Do not open, grep, copy or summarize
    `EVALUATION-INPUTS.yaml` until task #11. It runs once, at the end, and nothing is tuned
    against it. A deny rule and the hook enforce this.

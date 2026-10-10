@@ -23,7 +23,10 @@ One LangGraph graph serves both scopes. Starting code:
   the only way to reach one. It opens only when a persisted approval row exists for this
   action, caller and request. `action_confirmed` from the planner affects visibility only and
   never opens the gate.
-- Maya's intents have no route to `release_write()`.
+- `request_approval` is in neither `LOADOUTS` nor `WRITE_TOOLS`, because it needs no prior
+  approval. The graph's approval node calls it from code when a Webex action intent has
+  `action_confirmed`, then interrupts. The model never calls it directly.
+- Maya's intents have no route to `release_write()` or to the approval node.
 - The gate in the graph is a convenience, not authorization. The MCP server checks the
   approval again.
 
@@ -44,6 +47,21 @@ One LangGraph graph serves both scopes. Starting code:
 
 ## Entry point
 
-`run_turn(message, caller_id, user_group, thread_id)` is the only way in. It attaches the
-Langfuse callback, sets `session_id` and `user_id`, puts caller context in graph config and
-flushes Langfuse on exit. Tests, the CLI and the web chat all call it.
+```python
+run_turn(message, *, caller_id, user_group, thread_id, request_id=None)
+```
+
+This is the only way in. Tests, the CLI and the web chat all call it. It attaches the Langfuse
+callback, sets `session_id` = `thread_id` and `user_id` = `caller_id`, puts caller context and
+`request_id` in graph config, and flushes Langfuse on exit.
+
+`run_turn()` owns `request_id`:
+
+- If the thread is paused on an approval, it reads `request_id` from the checkpoint. A
+  different `request_id` passed in is an error, not an override.
+- Otherwise it uses the `request_id` the caller passed, or creates one with `uuid4()` when the
+  caller passed none. The eval runner passes the case id so traces match cases.
+- It stores `request_id` in graph state, so the checkpoint keeps it across the pause and the
+  resume.
+- It puts `request_id` in trace metadata and the tool wrapper injects it into every MCP call.
+  The model never creates, sees or chooses it.

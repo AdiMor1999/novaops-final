@@ -93,7 +93,7 @@ Each decision names the lesson principle behind it. "Ours" marks a decision no l
 | One graph: classify (`TurnPlan`) → scope → gather evidence → answer. Classify is the router. | L10, L9 |
 | `LOADOUTS` keyed by intent. `None` exposes all read tools, `[]` none. Write tools never appear in it. | L10 |
 | `release_write()` opens only on a persisted approval row for this action, caller and request. `action_confirmed` affects visibility only. | L10, L9, L13 |
-| The MCP write tools re-check the approval in one transaction. A graph guard is not authorization. | L13 |
+| The approval-gated MCP write tools re-check the approval in one transaction. A graph guard is not authorization. | L13 |
 | `interrupt()` plus an injected SQLite checkpointer. The resume is the same trace. | L9, L14 |
 | Every write carries an idempotency key. A replay returns the existing row with `reused: true`. An approval is consumed once. | L13, L14 |
 | Caller identity is a function input in graph config, never read from message text. | L13 |
@@ -119,7 +119,7 @@ Each decision names the lesson principle behind it. "Ours" marks a decision no l
 | Diagnose from the employee, subscription, tickets, access requests, approvals, then KB and policies. The seat overage is organizational. | L8, L7 |
 | "Go ahead" persists an approval request, interrupts and ends `pending`. A separate test records a decision, resumes the thread and shows one write. | L13, spec §9 |
 | `W-I-02` uses a team lookup by `manager_id` and states that seat assignments are not recorded. | Ours (spec §13) |
-| New tools: `get_approvals`, `request_approval` (behind the gate), `record_approval_decision` (application code only). | Gap no lesson covers |
+| New tools: `get_approvals`, `request_approval` (idempotent, creates a pending row, needs no prior approval; called by the graph's approval node, not the model), `record_approval_decision` (application code only). | Gap no lesson covers |
 
 ### Observability and evaluation
 
