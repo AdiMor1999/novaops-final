@@ -1,0 +1,59 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(./**)",
+      "Bash(python -m pytest*)",
+      "Bash(pytest*)",
+      "Bash(python -m scripts.*)",
+      "Bash(python -m evals.*)",
+      "Bash(python -m agent.*)",
+      "Bash(python -m mcp_server*)",
+      "Bash(python -m pip install -r requirements.txt)",
+      "Bash(pip install -r requirements.txt)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(ls*)",
+      "Bash(grep*)",
+      "Bash(sqlite3*)"
+    ],
+    "deny": [
+      "Read(//**/.env)",
+      "Read(//**/EVALUATION-INPUTS.yaml)",
+      "Edit(//**/EVALUATION-INPUTS.yaml)",
+      "Edit(//**/GOLDEN-DATASETS.json)",
+      "Edit(//**/novaops-course/**)",
+      "Edit(//**/lesson-code/**)",
+      "Edit(./evals/targets.py)",
+      "Edit(./tests/fixtures/**)",
+      "Edit(./.claude/**)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(rm -rf*)"
+    ]
+  },
+  "env": {
+    "PYTHONUNBUFFERED": "1",
+    "PYTHONDONTWRITEBYTECODE": "1"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|Read|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_protected_paths.py\"",
+            "timeout": 10,
+            "statusMessage": "checking protected paths"
+          }
+        ]
+      }
+    ]
+  }
+}
