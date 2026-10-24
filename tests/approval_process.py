@@ -23,10 +23,18 @@ CALLER = {"caller_id": "E007", "user_group": "UG_IT"}
 
 
 def start():
-    planner = ScriptedPlanner(plan("access_request", action_confirmed=True))
-    model = ScriptedModel(call("get_approvals", record_id="AR001"),
+    """Two turns: look Rachel up (the subject check needs her row in the thread),
+    then confirm the request, which pauses on the approval."""
+    planner = ScriptedPlanner(
+        plan("employee_lookup"),
+        plan("access_request", action_confirmed=True, subject_employee_id="E010",
+             system="Webex"))
+    model = ScriptedModel(call("get_employee", query="E010"),
+                          say("Rachel Stein is E010. [db:employees#E010]"),
+                          call("get_approvals", record_id="AR001"),
                           say("AR001 for E010 on Webex waits on AP001 from E006."))
-    return planner, model, "Go ahead and get Rachel Stein (E010) her Webex access."
+    return planner, model, ["Look up Rachel Stein.",
+                            "Go ahead and get Rachel Stein (E010) her Webex access."]
 
 
 def resume():
@@ -35,14 +43,15 @@ def resume():
         call("create_access_request", employee_id="E010", software="Webex",
              business_justification="Customer onboarding calls require Webex."),
         say("Access request AR001 is on file with status blocked; no new row was made."))
-    return ScriptedPlanner(), model, "E006 has approved it."
+    return ScriptedPlanner(), model, ["E006 has approved it."]
 
 
 async def main(phase: str) -> None:
-    planner, model, message = start() if phase == "start" else resume()
+    planner, model, messages = start() if phase == "start" else resume()
     with pytest.MonkeyPatch.context() as patch:
         use_stubs(patch, planner, model)
-        outcome = await run_turn(message, thread_id=THREAD, **CALLER)
+        for message in messages:
+            outcome = await run_turn(message, thread_id=THREAD, **CALLER)
     print(outcome.model_dump_json(), flush=True)
     if phase == "start":
         # No clean shutdown: whatever survives this is what the checkpointer wrote.

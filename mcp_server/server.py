@@ -75,9 +75,24 @@ def _serve(ctx: Context, name: str, payload: dict, work: Callable[[CallerContext
     return result
 
 
-def _rows(rows: list[dict], empty: str, **extra) -> dict:
-    """Empty and non-empty results look different on purpose: 'no rows' is an answer."""
-    result = {"count": len(rows), "rows": rows, **extra}
+def db_label(table: str, row_id: str | None = None) -> str:
+    """The citation label of one database row, e.g. [db:onboarding_tasks#OT005], or of
+    a whole result, [db:assets]."""
+    return f"[db:{table}#{row_id}]" if row_id else f"[db:{table}]"
+
+
+def _rows(rows: list[dict], empty: str, cite: tuple[str, str] | None = None, **extra) -> dict:
+    """Empty and non-empty results look different on purpose: 'no rows' is an answer.
+    With `cite` = (table, id column), every row gets the `citation` label an answer
+    cites for a fact taken from it, the same way document chunks carry theirs, and the
+    result gets `result_citation` for a fact about the result as a whole (what is
+    absent, how many there are)."""
+    result_label = {}
+    if cite:
+        table, key = cite
+        rows = [{**row, "citation": db_label(table, row[key])} for row in rows]
+        result_label = {"result_citation": db_label(table)}
+    result = {"count": len(rows), "rows": rows, **result_label, **extra}
     if not rows:
         result["note"] = empty
     return result
@@ -94,6 +109,19 @@ def _db(work: Callable) -> Callable[[CallerContext], dict]:
 
 def _policies_dir() -> Path:
     return config.documents_dir() / "policies"
+
+
+def _not_a_policy(stem: str) -> str:
+    """S9 turn 1: the model asked get_policy for titles-for-support (a handbook page)
+    and read "no policy" as "the page does not exist". Say where the file lives, but
+    only for collections every caller may search, so the message reveals nothing."""
+    for corpus, tool in (("handbook", "search_hr_documents"), ("it_kb", "search_knowledge_base"),
+                         ("internal_memos", "search_knowledge_base"),
+                         ("contracts", "search_knowledge_base")):
+        if (config.documents_dir() / corpus / f"{stem}.md").is_file():
+            return (f"{stem}.md is a {corpus} document, not a policy. Its sections come from "
+                    f"{tool}; use the chunks it already returned, with their citation labels.")
+    return f"No policy named {stem!r}. Call list_policies for valid names."
 
 
 @mcp.tool()
@@ -125,9 +153,10 @@ def get_policy(name: str, ctx: Context) -> dict:
         name: A policy name from list_policies, e.g. 'equipment_policy'.
     """
     def work(_caller):
-        path = _policies_dir() / f"{name.removesuffix('.md')}.md"
+        stem = name.removesuffix('.md')
+        path = _policies_dir() / f"{stem}.md"
         if not path.is_file():
-            raise ToolInputError(f"No policy named {name!r}. Call list_policies for valid names.")
+            raise ToolInputError(_not_a_policy(stem))
         doc = parse_document(path, "policies")
         sections = [{"section": s, "citation": citation_label(doc.source, s), "text": t}
                     for s, t in split_sections(doc)]
@@ -139,13 +168,15 @@ def get_policy(name: str, ctx: Context) -> dict:
 
 @mcp.tool()
 def search_knowledge_base(query: str, ctx: Context) -> dict:
-    """Search the IT knowledge base, company policies and internal memos.
+    """Search the IT knowledge base, company policies, internal memos and vendor
+    contracts.
 
     Use this for IT how-to and troubleshooting (VPN, MFA, password reset, laptops,
-    licenses) and for what a policy or memo says. Returns up to five chunks, most
+    licenses), for what a policy or memo says, and for contract terms (seat limits,
+    renewal dates, annual cost). Returns up to five chunks, most
     relevant first, each with a `citation` label like [vpn_access.md#Resolution] that
     the answer must cite. Memos can be newer than the policy they change: compare
-    `last_updated` and `doc_type`.
+    `last_updated` and `doc_type`; a `precedence_note` says which one is newer.
 
     Args:
         query: A natural-language description of the problem or question.
@@ -164,7 +195,9 @@ def search_hr_documents(query: str, ctx: Context) -> dict:
     Use this for onboarding, benefits, what was agreed for a specific person, or a memo
     that changed a rule. Returns up to five chunks, most relevant first, each with a
     `citation` label that the answer must cite. Employment chunks carry
-    `subject_employee_id`, the person the document is about.
+    `subject_employee_id`, the person the document is about; a caller only gets the
+    employment documents they may read. When `access_note` is present, the manager
+    playbook was not searched for this caller: say so if they asked for it.
 
     Args:
         query: A natural-language description of what you need to find.
@@ -180,15 +213,17 @@ def search_hr_documents(query: str, ctx: Context) -> dict:
 def get_employee(query: str, ctx: Context) -> dict:
     """Look up NovaOps employees by employee id, email or (partial) name.
 
-    Returns every match. Several employees share a first name, so check the id before
-    acting on a name. `systems_allowed_by_role` is what the role entitles someone to,
+    Returns every match, each with a `citation` label such as [db:employees#E001] to
+    cite for facts from that row. Several employees share a first name, so check the
+    id before acting on a name. `systems_allowed_by_role` is what the role entitles someone to,
     not what they have been given.
 
     Args:
         query: An employee id (e.g. 'E001'), an email, or a name.
     """
     return _serve(ctx, "get_employee", {"query": query}, _db(
-        lambda conn, _c: _rows(db.get_employee(conn, query), f"No employee matches {query!r}.")))
+        lambda conn, _c: _rows(db.get_employee(conn, query), f"No employee matches {query!r}.",
+                         ("employees", "employee_id"))))
 
 
 @mcp.tool()
@@ -203,7 +238,8 @@ def get_team(manager_id: str, ctx: Context) -> dict:
     """
     return _serve(ctx, "get_team", {"manager_id": manager_id}, _db(
         lambda conn, _c: _rows(db.get_team(conn, manager_id),
-                               f"{manager_id} has no direct reports in the database.")))
+                               f"{manager_id} has no direct reports in the database.",
+                               ("employees", "employee_id"))))
 
 
 # IT and HR records ------------------------------------------------------------------
@@ -225,7 +261,8 @@ def check_software_subscription(software: str, ctx: Context) -> dict:
     """
     return _serve(ctx, "check_software_subscription", {"software": software}, _db(
         lambda conn, _c: _rows(db.check_software_subscription(conn, software, config.today()),
-                               f"No subscription matches {software!r}.")))
+                               f"No subscription matches {software!r}.",
+                               ("software_subscriptions", "subscription_id"))))
 
 
 @mcp.tool()
@@ -233,7 +270,8 @@ def check_asset_inventory(ctx: Context, asset_type: str = "", location: str = ""
     """Check hardware inventory: what equipment exists, its status and location.
 
     `status: available` means it can be assigned now. Both arguments are optional
-    substring filters; omit them to list everything.
+    substring filters; omit them to list everything. For a new joiner, also check
+    list_onboarding_tasks: the checklist says when equipment will be prepared.
 
     Args:
         asset_type: e.g. 'Laptop' or 'Monitor'.
@@ -241,7 +279,8 @@ def check_asset_inventory(ctx: Context, asset_type: str = "", location: str = ""
     """
     return _serve(ctx, "check_asset_inventory", {"asset_type": asset_type, "location": location},
                   _db(lambda conn, _c: _rows(db.check_asset_inventory(conn, asset_type, location),
-                                             "No assets match these filters.")))
+                                             "No assets match these filters.",
+                                             ("assets", "asset_id"))))
 
 
 @mcp.tool()
@@ -258,7 +297,8 @@ def list_employee_tickets(employee_id: str, ctx: Context, status: str = "") -> d
     return _serve(ctx, "list_employee_tickets", {"employee_id": employee_id, "status": status},
                   _db(lambda conn, _c: _rows(db.list_employee_tickets(conn, employee_id, status),
                                              f"{employee_id} has no tickets"
-                                             f"{' with status ' + status if status else ''}.")))
+                                             f"{' with status ' + status if status else ''}.",
+                                             ("tickets", "ticket_id"))))
 
 
 @mcp.tool()
@@ -266,6 +306,7 @@ def list_onboarding_tasks(employee_id: str, ctx: Context) -> dict:
     """List one employee's onboarding checklist tasks, earliest due date first.
 
     The checklist is the system of record: a task is done only when this says so.
+    Each task has a `citation` label such as [db:onboarding_tasks#OT005].
     `blocked` tasks need their blocker explained; `overdue` is computed against today
     (2026-07-01).
 
@@ -274,7 +315,8 @@ def list_onboarding_tasks(employee_id: str, ctx: Context) -> dict:
     """
     return _serve(ctx, "list_onboarding_tasks", {"employee_id": employee_id}, _db(
         lambda conn, _c: _rows(db.list_onboarding_tasks(conn, employee_id, config.today()),
-                               f"{employee_id} has no onboarding tasks.")))
+                               f"{employee_id} has no onboarding tasks.",
+                               ("onboarding_tasks", "task_id"))))
 
 
 @mcp.tool()
@@ -292,7 +334,8 @@ def get_access_requests(ctx: Context, employee_id: str = "", access_request_id: 
     return _serve(ctx, "get_access_requests",
                   {"employee_id": employee_id, "access_request_id": access_request_id},
                   _db(lambda conn, _c: _rows(db.get_access_requests(conn, employee_id, access_request_id),
-                                             "No access requests match.")))
+                                             "No access requests match.",
+                                             ("access_requests", "request_id"))))
 
 
 @mcp.tool()
@@ -308,7 +351,8 @@ def get_approvals(ctx: Context, record_id: str = "", employee_id: str = "") -> d
     """
     return _serve(ctx, "get_approvals", {"record_id": record_id, "employee_id": employee_id},
                   _db(lambda conn, _c: _rows(db.get_approvals(conn, record_id, employee_id),
-                                             "No approvals match.")))
+                                             "No approvals match.",
+                                             ("approvals", "approval_id"))))
 
 
 # Approval request and gated writes --------------------------------------------------

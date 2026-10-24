@@ -1,13 +1,18 @@
 """The agent graph: one graph, both scopes.
 
-    START → classify → scope → gather ⇄ tools            (≤ MAX_TOOL_CALLS per turn)
-                                 │  └→ rearm → gather      (once, reads only)
-                                 ├→ request_approval → await_approval (interrupt)
-                                 │        ↑ pending              │ resume
-                                 │        └──── write_gate ←─────┘
-                                 │               ├ approved → gather (released write visible)
-                                 │               └ otherwise → answer
-                                 └→ answer → END
+    START ─(fresh history over threshold)→ distil ─┐
+      └──────────────────────────────────────────→ classify → scope
+    scope ├ confirmed access, subject preboarding → handoff ────────────→ answer
+          ├ confirmed access, subject not verified → unverified ────────→ answer
+          └→ gather ⇄ tools                        (≤ MAX_TOOL_CALLS per turn)
+               │  ├→ rearm → gather                (once, reads only)
+               │  └→ refine → gather               (once: the checklist was never read)
+               ├→ request_approval → await_approval (interrupt)
+               │        ↑ pending              │ resume
+               │        └──── write_gate ←─────┘
+               │               ├ approved → gather (released write visible)
+               │               └ otherwise → answer
+               └→ cite (one repair) → checklist (onboarding rows only) → answer → END
 
 Starting code: Lesson 10 `02-dynamic-tool-loadout/graph.py` and
 `03-history-distillation/graph.py` (plan → select → model ⇄ tools, rearm), the
@@ -25,7 +30,10 @@ of Lesson 11 `02-instrument-agent/graph.py`. Changes:
   refuses a call to any tool that is not visible this turn.
 - Writes are reachable only through `write_gate`, which opens on a persisted approval
   row (agent/gate.py). `request_approval` is called by the approval node, from code.
-- Conversation `ConversationMemory` distillation (Lesson 10 stage 3) is task #4.
+- Task #4: `ConversationMemory` distillation (Lesson 10 stage 3, agent/memory.py);
+  the subject check and the Maya handoff through an injected `WebexPort`
+  (agent/handoff.py, agent/ports.py); the per-sentence citation check with one
+  repair call (`cite`); and the forced `submit_checklist` record (agent/records.py).
 """
 
 import json
@@ -42,12 +50,20 @@ from langgraph.graph.message import add_messages
 from langgraph.types import interrupt
 from pydantic import BaseModel
 
+from agent import config
 from agent.gate import GateDecision, release_write
+from agent.handoff import action_route, build_handoff, resolve_subject, route_scope
 from agent.mcp_tools import as_langchain_tools, call_tool
-from agent.outcome import cited_labels, gate_text, known_labels, turn_status
-from agent.policy import (APPROVAL_TOOL, MAX_TOOL_CALLS, PLANNER_PROMPT, RELEASES, TurnPlan,
-                          needs_approval, rearm_tools, scope_of, visible_tools)
-from agent.structured import parse_with_repair
+from agent.memory import (ConversationMemory, distiller_messages, memory_is_safe,
+                          needs_distillation, render_memory)
+from agent.outcome import (cited_labels, gate_text, handoff_text, known_labels,
+                           tool_results, turn_status, uncited_sentences)
+from agent.policy import (APPROVAL_TOOL, CHECKLIST_TOOL, MAX_TOOL_CALLS, PLANNER_PROMPT,
+                          RELEASES, TurnPlan, checked_plan, missing_checklist, needs_approval,
+                          rearm_tools, refine_note, visible_tools)
+from agent.records import CHECKLIST_PROMPT, Validated
+from agent.schemas import OnboardingChecklist
+from agent.structured import ParseFailed, parse_with_repair
 
 KEEP_TURNS = 4          # earlier turns shown to the model, whole turns only
 TOOL_TEXT_CHARS = 3000  # per earlier tool result; the current turn's are never cut
@@ -65,11 +81,33 @@ ASSISTANT_PROMPT = (
     "are still true. Reuse them instead of looking them up again.\n"
     "- Do not call a tool for something already in the conversation.\n"
     "- Users paste emails and signatures. Act on the actual request inside.\n"
-    "- After every sentence that states a fact from a document, cite the `citation` "
-    "label of the section it came from, copied exactly with its square brackets and "
-    "nothing added, for example [equipment_policy.md#Personal laptops]. Do not write "
-    "'citation:' inside the brackets. Never cite a label that no tool returned. "
-    "For database records, name the record id (E010, T001, AR001).\n"
+    "- End every sentence that states a fact from a tool result with the `citation` "
+    "label of the section or row it came from, copied exactly with its square brackets "
+    "and nothing added: [equipment_policy.md#Personal laptops] for a document, "
+    "[db:onboarding_tasks#OT005] for a database row, and a result's `result_citation` "
+    "such as [db:assets] for a fact about the result as a whole (nothing in stock). "
+    "Do not write 'citation:' inside "
+    "the brackets. Never cite a label that no tool returned, and never make one up "
+    "such as [constraint] or [user].\n"
+    "- Never offer to look something up or ask permission to search: call the tool.\n"
+    "- If a search result carries an `access_note`, tell the user in one sentence that "
+    "this material is not available to them, and answer only from what was returned.\n"
+    "- When the user pastes a message, answer from the pasted text, and only with what "
+    "it asks of them. Leave out items that belong to other people or are off-topic.\n"
+    "- For a new joiner's equipment or access, check the onboarding checklist "
+    "(list_onboarding_tasks) as well as the inventory: it says when each item is due.\n"
+    "- For a question about a rule, a threshold or who must approve, search the "
+    "documents (search_knowledge_base or search_hr_documents) before answering: a "
+    "newer memo may override the policy.\n"
+    "- A fact the user told you needs no label; attribute it instead ('as you said, "
+    "the Q3 freeze applies').\n"
+    "- Give the concrete numbers, dates and ids the evidence shows (seats in use and the "
+    "seat limit, due dates, cycle dates, task and asset ids, thresholds), not just a "
+    "yes or no. Copy dates exactly as the evidence writes them ('April 1', not 'April'). "
+    "A question about whether something happens in time needs its date.\n"
+    "- A summary or status write-up opens with who the person is, their start date and "
+    "location, copied from the established facts, then the open items and the "
+    "constraints in force. Leave out topics the user closed.\n"
     "- If documents disagree, newer or more specific guidance (a later memo) overrides "
     "older or more general guidance (a policy); say which one you followed.\n"
     "- If the evidence does not answer the question, say what is missing. Do not guess.\n"
@@ -95,6 +133,10 @@ class AgentState(TypedDict, total=False):
     intent: str
     visible_tools: list[str]
     rearmed: bool
+    caller: dict             # {"caller_id", "user_group"} from graph config, for prompts
+    refined: bool            # the one refined round of this turn has run
+    refine: str              # what the refined round asks for, shown to the model
+    force: str               # a tool the next gather call must call (the refined round)
     turn_tools: list[str]    # tool calls made this turn, in order
     turn_errors: list[str]
     approval: dict | None    # the request_approval row, once requested
@@ -102,6 +144,14 @@ class AgentState(TypedDict, total=False):
     answer: str
     citations: list[str]
     status: str
+    memory: dict             # ConversationMemory, durable across turns
+    distilled_upto: int      # messages before this index are represented by memory
+    route: str | None        # action_route() of this turn
+    handoffs: dict           # idempotency key -> {"handoff", "result"}; durable
+    handoff: dict | None     # this turn's handoff, if any
+    draft: str               # the answer after the citation check
+    uncited: list[str]       # sentences still uncited after the one repair
+    checklist: dict | None
 
 
 # History projections ----------------------------------------------------------------
@@ -168,21 +218,48 @@ def render_plan(plan: TurnPlan) -> str:
     )
 
 
-def planner_messages(state: AgentState) -> list:
-    history = state["messages"][:-1]
-    prompt = (
-        "Conversation so far:\n"
-        f"{render_transcript(history, PLANNER_TOOL_CHARS) or '(this is the first turn)'}\n\n"
-        f"User's newest message:\n{message_text(state['messages'][-1])}"
-    )
-    return [SystemMessage(PLANNER_PROMPT), HumanMessage(prompt)]
+def planner_transcript(messages: list) -> str:
+    return render_transcript(messages, PLANNER_TOOL_CHARS)
+
+
+def caller_line(caller: dict | None) -> str:
+    """Who "I" and "me" are. Taken from graph config (the session), never from message
+    text, so showing it to the model grants nothing: tools still check the caller from
+    MCP `_meta`. Without it, S9's "am I getting a laptop?" made the model ask for an id."""
+    if not caller:
+        return ""
+    return (f"The user you are talking to is employee {caller['caller_id']} "
+            f"({caller['user_group']}). 'I', 'me' and 'my' refer to them.")
+
+
+def planner_messages(state: AgentState, caller: dict | None = None) -> list:
+    """Before any distillation, the whole history. After it, the memory plus only the
+    messages since (Lesson 10 stage 3), which is what bounds the planner's input."""
+    covered = state.get("distilled_upto", 0) if state.get("memory") else 0
+    history = planner_transcript(state["messages"][covered:-1])
+    if covered:
+        prompt = (f"Session memory:\n{render_memory(state['memory'])}\n\n"
+                  f"Conversation since then:\n{history or '(nothing new)'}\n\n")
+    else:
+        prompt = f"Conversation so far:\n{history or '(this is the first turn)'}\n\n"
+    prompt += f"User's newest message:\n{message_text(state['messages'][-1])}"
+    who = caller_line(caller or state.get("caller"))
+    return [SystemMessage(PLANNER_PROMPT + (f"\n{who}" if who else "")), HumanMessage(prompt)]
 
 
 def gather_messages(state: AgentState, *, with_tools: bool) -> list:
     """System prompt, the plan, earlier turns as text, then the current turn. When no
     tools are bound, this turn's tool traffic is folded into the text as well."""
     plan = TurnPlan(**state["plan"])
-    system = ASSISTANT_PROMPT + render_plan(plan)
+    # The pinned clock (NOVAOPS_TODAY), so "before the 1st" is compared to a real date.
+    system = ASSISTANT_PROMPT + f"\nToday is {config.today().isoformat()}."
+    if who := caller_line(state.get("caller")):
+        system += f"\n{who}"
+    system += render_plan(plan)
+    if state.get("memory"):
+        system += f"\n\nSession memory:\n{render_memory(state['memory'])}"
+    if state.get("refine"):
+        system += f"\n\n{state['refine']}"
     earlier = render_transcript(earlier_turns(state["messages"]), TOOL_TEXT_CHARS)
     if earlier:
         system += f"\n\nEarlier in this conversation:\n{earlier}"
@@ -192,18 +269,6 @@ def gather_messages(state: AgentState, *, with_tools: bool) -> list:
     gathered = render_transcript(turn[1:], 10 ** 6)
     system += f"\n\nTool results gathered for the current message:\n{gathered}"
     return [SystemMessage(system), turn[0]]
-
-
-def tool_results(messages: list, name: str | None = None) -> list[dict]:
-    out = []
-    for message in messages:
-        if isinstance(message, ToolMessage) and message.status != "error" \
-                and (name is None or message.name == name):
-            try:
-                out.append(json.loads(message_text(message)))
-            except json.JSONDecodeError:
-                continue
-    return out
 
 
 def propose_action(state: AgentState) -> ProposedAction | None:
@@ -221,11 +286,64 @@ def propose_action(state: AgentState) -> ProposedAction | None:
 
 # The graph --------------------------------------------------------------------------
 
-def build_graph(session, specs: list, checkpointer, *, model, planner):
+def repair_messages(state: AgentState, draft: str, uncited: list[str],
+                    invented: list[str]) -> list:
+    """The citation repair: the same evidence, the draft, and what to fix, in one user
+    message (Bedrock wants user and assistant turns to alternate)."""
+    context = gather_messages(state, with_tools=False)
+    question = message_text(current_turn(state["messages"])[0])
+    problems = ""
+    if uncited:
+        problems += ("These sentences state facts without a citation label:\n"
+                     + "\n".join(f"- {s}" for s in uncited) + "\n")
+    if invented:
+        problems += f"These labels were returned by no tool: {', '.join(invented)}\n"
+    return [context[0], HumanMessage(
+        f"{question}\n\nYour draft answer:\n{draft}\n\n{problems}\nRewrite the answer. "
+        "End each fact sentence with the label of the tool result it came from, copied "
+        "exactly. Attribute facts the user told you ('as you said') instead of labelling "
+        "them. If no tool result supports a sentence, remove it. Return only the answer.")]
+
+
+def checklist_messages(state: AgentState, draft: str) -> list:
+    turn = current_turn(state["messages"])
+    evidence = render_transcript(turn[1:], 10 ** 6)
+    return [SystemMessage(CHECKLIST_PROMPT), HumanMessage(
+        f"Request: {message_text(turn[0])}\n\nTool results:\n{evidence}\n\n"
+        f"Answer already given:\n{draft}")]
+
+
+def access_note_this_turn(messages: list) -> str | None:
+    for result in tool_results(current_turn(messages)):
+        if result.get("access_note"):
+            return result["access_note"]
+    return None
+
+
+def with_access_note(text: str, messages: list) -> str:
+    """S9 turn 4: a non-manager asks what the manager's guide says. The search ran with
+    the playbook filtered out and returned the fixed note; the answer must say so
+    rather than answer from look-alike handbook text as if it were the guide. Code adds
+    the note when the user asked about manager material and the answer left it out."""
+    note = access_note_this_turn(messages)
+    asked = "manager" in message_text(current_turn(messages)[0]).lower()
+    if note and asked and note.lower() not in text.lower():
+        return f"{note} {text}"
+    return text
+
+
+def onboarding_rows_this_turn(state: AgentState) -> bool:
+    return any(r.get("rows") for r in tool_results(current_turn(state["messages"]),
+                                                   "list_onboarding_tasks"))
+
+
+def build_graph(session, specs: list, checkpointer, *, model, planner, distiller=None,
+                checklist=None, port=None):
     """`session` is an open MCP ClientSession, `specs` its list_tools() result.
     `model` is the chat model (bind_tools), `planner` the structured TurnPlan model
-    (`with_structured_output(TurnPlan, include_raw=True)`). `checkpointer` is injected
-    and must be durable."""
+    (`with_structured_output(TurnPlan, include_raw=True)`), `distiller` the structured
+    ConversationMemory model, `checklist` the forced `submit_checklist` model, and
+    `port` the WebexPort for this turn. `checkpointer` is injected and must be durable."""
     tools = {t.name: t for t in as_langchain_tools(session, specs)}
     catalogue = sorted(tools)
     bound: dict[tuple, object] = {}
@@ -243,24 +361,85 @@ def build_graph(session, specs: list, checkpointer, *, model, planner):
         # them from the running node's context.
         return {"configurable": config["configurable"], "callbacks": []}
 
-    async def classify(state: AgentState) -> dict:
-        plan = await parse_with_repair(planner, planner_messages(state), TurnPlan)
-        return {"plan": plan.model_dump(), "intent": plan.intent, "rearmed": False,
+    async def distil(state: AgentState) -> dict:
+        """Lesson 10 stage 3. A memory that fails to parse after one repair, or that
+        drops an active constraint, is rejected: the old memory and the raw history
+        both stay, so the safe failure costs tokens, not facts."""
+        try:
+            memory = await parse_with_repair(
+                distiller, distiller_messages(state, planner_transcript), ConversationMemory)
+        except ParseFailed:
+            return {}
+        if not memory_is_safe(state.get("memory") or {}, memory):
+            return {}
+        return {"memory": memory.model_dump(), "distilled_upto": len(state["messages"])}
+
+    async def classify(state: AgentState, config: RunnableConfig) -> dict:
+        configurable = config["configurable"]
+        caller = {"caller_id": configurable["caller_id"],
+                  "user_group": configurable["user_group"]}
+        plan = await parse_with_repair(planner, planner_messages(state, caller), TurnPlan)
+        plan = checked_plan(plan, has_history=len(turn_starts(state["messages"])) > 1,
+                            message=message_text(state["messages"][-1]))
+        return {"plan": plan.model_dump(), "intent": plan.intent, "caller": caller,
+                "rearmed": False, "force": "",
+                "refined": False, "refine": "",
                 "turn_tools": [], "turn_errors": [], "approval": None, "gate": None,
-                "answer": "", "citations": [], "status": ""}
+                "answer": "", "citations": [], "status": "", "route": None,
+                "handoff": None, "draft": "", "uncited": [], "checklist": None}
 
     def scope(state: AgentState) -> dict:
         """A dict lookup, not a model call: the model says what the turn is about, and
-        code decides which assistant owns it and what it may touch."""
+        code decides which assistant owns it and what it may touch. A confirmed access
+        request is routed on the subject's record (agent/handoff.py)."""
         plan = TurnPlan(**state["plan"])
-        return {"scope": scope_of(plan), "intent": plan.intent,
-                "visible_tools": visible_tools(plan, catalogue)}
+        route = action_route(plan, state["messages"])
+        tools_now = [] if route in ("handoff", "unverified") else visible_tools(plan, catalogue)
+        return {"scope": route_scope(plan, route), "intent": plan.intent, "route": route,
+                "visible_tools": tools_now}
+
+    async def handoff(state: AgentState, config: RunnableConfig) -> dict:
+        """The Maya handoff. No model call and no model tool call: code builds the
+        typed handoff and calls the port once per idempotency key. A replay of the
+        same request on this thread finds the key in state and does not call again."""
+        plan = TurnPlan(**state["plan"])
+        built = build_handoff(state["messages"], plan, config["configurable"])
+        if isinstance(built, str):
+            return {"gate": asdict(GateDecision(False, "unverified", built))}
+        done = dict(state.get("handoffs") or {})
+        if built.idempotency_key in done:
+            return {"handoff": done[built.idempotency_key]}
+        try:
+            result = await port.request_access(built)
+        except ToolException as exc:
+            return {"gate": asdict(GateDecision(False, "error", f"Webex handoff: {exc}"))}
+        record = {"handoff": built.model_dump(), "result": result.model_dump()}
+        done[built.idempotency_key] = record
+        return {"handoff": record, "handoffs": done}
+
+    def unverified(state: AgentState) -> dict:
+        plan = TurnPlan(**state["plan"])
+        return {"gate": asdict(GateDecision(
+            False, "unverified",
+            f"No employee record looked up in this conversation matches "
+            f"{plan.subject_employee_id or 'the person named'}, so nothing was handed off. "
+            "Look the person up first."))}
+
+    def forced(name: str):
+        """The model bound to one tool it must call (Converse `toolChoice: tool`)."""
+        key = ("force", name)
+        if key not in bound:
+            bound[key] = model.bind_tools([tools[name]], tool_choice=name)
+        return bound[key]
 
     async def gather(state: AgentState) -> dict:
         names = state["visible_tools"] if len(state["turn_tools"]) < MAX_TOOL_CALLS else []
-        response = await model_for(names).ainvoke(
-            gather_messages(state, with_tools=bool(names)))
-        return {"messages": [response]}
+        if state.get("force") and names:
+            runnable = forced(state["force"])
+        else:
+            runnable = model_for(names)
+        response = await runnable.ainvoke(gather_messages(state, with_tools=bool(names)))
+        return {"messages": [response], "force": ""}
 
     async def run_tools(state: AgentState, config: RunnableConfig) -> dict:
         last = state["messages"][-1]
@@ -295,6 +474,23 @@ def build_graph(session, specs: list, checkpointer, *, model, planner):
         return {"visible_tools": rearm_tools(catalogue), "rearmed": True,
                 "messages": [RemoveMessage(id=state["messages"][-1].id)]}
 
+    def refine(state: AgentState, config: RunnableConfig) -> dict:
+        """The one refined retrieval round (agent/CLAUDE.md): the draft is discarded and
+        the next model call is forced to call the checklist tool (asking was not enough:
+        Nova Lite skipped it). The subject is resolved to an employee id from the thread.
+        Reads only, once per turn."""
+        names = list(state["visible_tools"])
+        if CHECKLIST_TOOL not in tools:
+            return {"refined": True}
+        if CHECKLIST_TOOL not in names:
+            names.append(CHECKLIST_TOOL)
+        plan = TurnPlan(**state["plan"])
+        who = resolve_subject(state["messages"], plan.subject_employee_id,
+                              config["configurable"]["caller_id"])
+        return {"visible_tools": names, "refined": True, "force": CHECKLIST_TOOL,
+                "refine": refine_note(who),
+                "messages": [RemoveMessage(id=state["messages"][-1].id)]}
+
     async def request_approval(state: AgentState, config: RunnableConfig) -> dict:
         proposal = propose_action(state)
         if proposal is None:
@@ -327,21 +523,57 @@ def build_graph(session, specs: list, checkpointer, *, model, planner):
             update["visible_tools"] = [n for n in decision.released if n in tools]
         return update
 
+    async def cite(state: AgentState) -> dict:
+        """Every fact-stating sentence on a turn with tool results must carry a label.
+        One repair call (the whole evidence again plus the draft, roughly doubling the
+        answer's input tokens) on a miss; a second miss is left for answer() to mark
+        needs_human. The repaired answer replaces the draft in the history."""
+        last = state["messages"][-1]
+        if not (isinstance(last, AIMessage) and not last.tool_calls):
+            return {}
+        draft = message_text(last)
+        if not known_labels(current_turn(state["messages"])):
+            return {"draft": draft}
+        _, invented = cited_labels(draft, known_labels(state["messages"]))
+        missing = uncited_sentences(draft)
+        if not (missing or invented):
+            return {"draft": draft}
+        repaired = await model_for([]).ainvoke(
+            repair_messages(state, draft, missing, invented))
+        text = message_text(repaired)
+        return {"draft": text, "uncited": uncited_sentences(text),
+                "messages": [RemoveMessage(id=last.id), AIMessage(content=text)]}
+
+    async def make_checklist(state: AgentState) -> dict:
+        record = await parse_with_repair(
+            Validated(checklist, OnboardingChecklist, known_labels(state["messages"])),
+            checklist_messages(state, state.get("draft", "")), OnboardingChecklist)
+        return {"checklist": record.model_dump()}
+
     def answer(state: AgentState) -> dict:
         gate = state.get("gate")
         last = state["messages"][-1]
+        done = state.get("handoff")
         if gate and not gate["open"]:
             text = gate_text(gate)
+        elif done:
+            text = handoff_text(done["handoff"], done["result"])
+        elif state.get("draft"):
+            text = with_access_note(state["draft"], state["messages"])
         elif isinstance(last, AIMessage) and not last.tool_calls:
             text = message_text(last)
         else:
             text = "I could not finish this request within the tool-call limit."
+        if done and not (gate and not gate["open"]):
+            # The handoff's status is the port's answer, not a guess from the text.
+            return {"answer": text, "citations": [], "status": done["result"]["status"]}
         turn = current_turn(state["messages"])
         valid, invented = cited_labels(text, known_labels(state["messages"]))
         status = turn_status(TurnPlan(**state["plan"]), gate, state["turn_tools"],
                              state["turn_errors"], valid, invented,
-                             bool(known_labels(turn)))
-        return {"answer": text, "citations": valid, "status": status}
+                             bool(known_labels(turn)), state.get("uncited"))
+        return {"answer": text, "citations": valid, "status": status,
+                "messages": [AIMessage(content=text)] if text != message_text(last) else []}
 
     def after_gather(state: AgentState) -> str:
         last = state["messages"][-1]
@@ -353,6 +585,26 @@ def build_graph(session, specs: list, checkpointer, *, model, planner):
             return "rearm"
         if needs_approval(plan) and state.get("approval") is None and state.get("gate") is None:
             return "request_approval"
+        if state["turn_tools"] and not state.get("refined") and not state.get("gate") \
+                and len(state["turn_tools"]) < MAX_TOOL_CALLS \
+                and missing_checklist(plan, state["turn_tools"]):
+            return "refine"
+        return "cite"
+
+    def after_start(state: AgentState) -> str:
+        if distiller is not None and needs_distillation(state, planner_transcript):
+            return "distil"
+        return "classify"
+
+    def after_scope(state: AgentState) -> str:
+        return {"handoff": "handoff", "unverified": "unverified"}.get(state.get("route"),
+                                                                      "gather")
+
+    def after_cite(state: AgentState) -> str:
+        plan = TurnPlan(**state["plan"])
+        if checklist is not None and plan.intent == "onboarding_status" \
+                and onboarding_rows_this_turn(state):
+            return "checklist"
         return "answer"
 
     def after_request(state: AgentState) -> str:
@@ -365,21 +617,33 @@ def build_graph(session, specs: list, checkpointer, *, model, planner):
         return "await_approval" if gate["state"] == "pending" else "answer"
 
     graph = StateGraph(AgentState)
+    graph.add_node("distil", distil)
     graph.add_node("classify", classify)
     graph.add_node("scope", scope)
     graph.add_node("gather", gather)
     graph.add_node("tools", run_tools)
     graph.add_node("rearm", rearm)
+    graph.add_node("refine", refine)
     graph.add_node("request_approval", request_approval)
     graph.add_node("await_approval", await_approval)
     graph.add_node("write_gate", write_gate)
+    graph.add_node("handoff", handoff)
+    graph.add_node("unverified", unverified)
+    graph.add_node("cite", cite)
+    graph.add_node("checklist", make_checklist)
     graph.add_node("answer", answer)
 
-    graph.add_edge(START, "classify")
+    graph.add_conditional_edges(START, after_start, ["distil", "classify"])
+    graph.add_edge("distil", "classify")
     graph.add_edge("classify", "scope")
-    graph.add_edge("scope", "gather")
-    graph.add_conditional_edges("gather", after_gather, ["tools", "rearm",
-                                                         "request_approval", "answer"])
+    graph.add_conditional_edges("scope", after_scope, ["handoff", "unverified", "gather"])
+    graph.add_edge("handoff", "answer")
+    graph.add_edge("unverified", "answer")
+    graph.add_conditional_edges("gather", after_gather, ["tools", "rearm", "refine",
+                                                         "request_approval", "cite"])
+    graph.add_edge("refine", "gather")
+    graph.add_conditional_edges("cite", after_cite, ["checklist", "answer"])
+    graph.add_edge("checklist", "answer")
     graph.add_edge("tools", "gather")
     graph.add_edge("rearm", "gather")
     graph.add_conditional_edges("request_approval", after_request, ["await_approval", "answer"])

@@ -14,8 +14,15 @@ its `graph.py`. Changes:
 - `select_tools()` never adds a write tool. Lesson 10 added `create_access_request`
   when `action_confirmed` was set; here `action_confirmed` only routes a Webex turn to
   the approval node, and only `release_write()` (agent/gate.py) can make a write visible.
+- Task #4: `TurnPlan` is the context plan of the Lesson 10 homework. It names the
+  subject employee and the system, which code verifies against records already in the
+  thread (agent/handoff.py) before a confirmed action goes anywhere. Two loadout rows
+  gained a tool the S2/S9 matrix showed missing (evals/tool_matrix.py):
+  `subscription_review` gets `search_hr_documents` (S2 turn 9, the freeze memo) and
+  `equipment_request` gets `list_onboarding_tasks` (S9 turn 5, OT003).
 """
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -71,12 +78,12 @@ LOADOUTS: dict[str, list[str] | None] = {
         "check_software_subscription", "get_access_requests",
     ],
     "equipment_request": [
-        "get_employee", "check_asset_inventory", "list_policies", "get_policy",
-        "search_knowledge_base", "search_hr_documents",
+        "get_employee", "check_asset_inventory", "list_onboarding_tasks", "list_policies",
+        "get_policy", "search_knowledge_base", "search_hr_documents",
     ],
     "subscription_review": [
         "check_software_subscription", "get_team", "get_access_requests", "get_approvals",
-        "search_knowledge_base", "get_policy",
+        "search_knowledge_base", "search_hr_documents", "get_policy",
     ],
     "access_request": [
         "get_employee", "check_software_subscription", "get_access_requests",
@@ -126,7 +133,11 @@ class TurnPlan(BaseModel):
         description="Rules the user stated that are still in force.",
     )
     needs_tools: bool = Field(
-        description="False only if every fact needed is already in this conversation."
+        description=(
+            "False only if every fact needed is already in this conversation. True for "
+            "any question about the current state (what is 'still' open, 'now', 'after "
+            "that') and for any rule, threshold or approval no tool result here states."
+        )
     )
     action_confirmed: bool = Field(
         default=False,
@@ -135,6 +146,18 @@ class TurnPlan(BaseModel):
             "system ('go ahead', 'file it'). Writing, drafting, summarising or 'write it "
             "up' is composing text, NOT authorisation to file anything."
         ),
+    )
+    subject_employee_id: str | None = Field(
+        default=None,
+        description=(
+            "Employee id (e.g. E001) of the person the newest message is about, taken "
+            "from a record already in this conversation. The person, not the caller. "
+            "Null if no record in the conversation identifies them."
+        ),
+    )
+    system: str | None = Field(
+        default=None,
+        description="The software system the newest message is about (e.g. Webex), or null.",
     )
 
 
@@ -150,11 +173,70 @@ PLANNER_PROMPT = (
     "- needs_tools is False only for recaps, follow-ups and reasoning over facts already "
     "in this conversation, including tool results from earlier turns. You know nothing "
     "about NovaOps otherwise, so a first turn is almost always True.\n"
+    "- needs_tools is True when the answer depends on a policy rule, a threshold, an "
+    "approval requirement, or the CURRENT state of a checklist, seat count, ticket or "
+    "inventory, unless a tool result in this conversation already states exactly that. "
+    "A constraint the user stated ('the freeze applies') is not the rule: look up what "
+    "the rule requires.\n"
+    "- 'still', 'now', 'right now', 'after that', 'currently' ask for the current state: "
+    "needs_tools "
+    "is True.\n"
     "- A DIFFERENT TOPIC needs a different document. Having retrieved the VPN article "
     "does not answer a password question. Only an answer you could quote from THIS "
     "conversation makes needs_tools False.\n"
-    "- action_confirmed only when this message says to go ahead; then needs_tools is True."
+    "- action_confirmed only when this message says to go ahead; then needs_tools is True.\n"
+    "- subject_employee_id is the id of the person the request is about (E001), copied "
+    "from an employee record in the conversation, or the caller's own id when they ask "
+    "about themselves; system names the software.\n"
+    "- You may be given distilled session memory plus the raw conversation since it was "
+    "written. The memory's topic is the session's history, not this turn.\n"
+    "- Checklists, seat counts, tickets and inventory in memory are a SNAPSHOT; if the "
+    "user asks what the state is NOW, needs_tools is True."
 )
+
+
+# Words that ask for the state of a record as it is now, not as an earlier turn saw it.
+CURRENT_STATE = re.compile(r"\b(right now|currently|still|after that|now)\b", re.IGNORECASE)
+
+
+def checked_plan(plan: TurnPlan, has_history: bool, message: str = "") -> TurnPlan:
+    """Code corrects two planner claims it can disprove. `needs_tools=False` means every
+    fact is already in the conversation, which is false:
+
+    - on a first turn, where there is no conversation (any topic but `other`, which
+      covers greetings). Nova Lite returned False for S9 turn 1 on every try;
+    - when the message asks for the current state ("what's on her checklist right
+      now?", S2 turn 3). An earlier tool result is a snapshot, not the state now.
+      Only the first paragraph is read: it is the user's own request, and a pasted
+      thread after it ("baseline groups are still pending", S9 turn 2) is not."""
+    if plan.needs_tools or plan.intent == "other":
+        return plan
+    request = message.strip().split("\n\n")[0]
+    if not has_history or CURRENT_STATE.search(request):
+        return plan.model_copy(update={"needs_tools": True})
+    return plan
+
+
+# Intents whose answer is about a person's onboarding: the checklist is the system of
+# record for what is due and when (list_onboarding_tasks' docstring says so).
+# Only equipment: onboarding_status turns reach the checklist on their own once the
+# model knows who "I" is, and forcing it on S2 turn 2 (the offer letter) made the
+# planner skip the fresh lookup S2 turn 3 needs.
+CHECKLIST_INTENTS = frozenset({"equipment_request"})
+CHECKLIST_TOOL = "list_onboarding_tasks"
+
+
+def missing_checklist(plan: TurnPlan, called: list[str]) -> bool:
+    """True when a turn about someone's onboarding or equipment looked things up but
+    never read the checklist. The graph then runs its one refined round. Nova Lite
+    answered S9 turn 5 ("am I getting a laptop before the 1st?") from inventory alone
+    on four runs out of four, so the due date (OT003, 2026-07-26) never reached it."""
+    return plan.needs_tools and plan.intent in CHECKLIST_INTENTS and CHECKLIST_TOOL not in called
+
+
+def refine_note(who: str) -> str:
+    return (f"Before answering, call {CHECKLIST_TOOL} for {who}: the onboarding checklist "
+            "is the system of record for what is due and when. Then answer with both.")
 
 
 def scope_of(plan: TurnPlan) -> Scope:

@@ -20,7 +20,7 @@ async def test_s1_and_s3_bind_different_tools_without_a_model(seeded, monkeypatc
     s1 = await run_turn(S1_T1, caller_id="E010", user_group="UG_REGULAR", thread_id="t-s1")
 
     s3_model = ScriptedModel(call("check_software_subscription", software="Webex"),
-                             say("Webex has 42 active seats on a 40-seat limit."))
+                             say("Webex has 42 active seats on a 40-seat limit. [db:software_subscriptions#SUB001]"))
     use_stubs(monkeypatch, ScriptedPlanner(plan("subscription_review")), s3_model)
     s3 = await run_turn(S3_T1, caller_id="E007", user_group="UG_IT", thread_id="t-s3")
 
@@ -70,7 +70,7 @@ async def test_a_tool_that_is_not_visible_is_not_run(seeded, monkeypatch, conn):
                  business_justification="calls")
     use_stubs(monkeypatch, ScriptedPlanner(plan("access_request")),
               ScriptedModel(write, call("get_access_requests", employee_id="E010"),
-                            say("AR001 is blocked on seats.")))
+                            say("AR001 is blocked on seats. [db:access_requests#AR001]")))
     out = await run_turn("Give Rachel Webex.", caller_id="E007", user_group="UG_IT",
                          thread_id="t-hidden")
     assert "create_access_request" not in out.tools_called

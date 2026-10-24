@@ -13,6 +13,19 @@ What changed from Lesson 7:
 - The clause is a pre-filter: it sits inside `knn.vector.filter`, so the engine applies
   it during the HNSW walk. A restricted chunk never enters the candidate list, so it can
   never reach the reranker or the answer model. A post-filter would already have leaked.
+- A second clause in the same filter guards employment documents (task #4). An
+  `employment` chunk with a `subject_employee_id` is readable only by that subject, by
+  a UG_HR caller and by the subject's manager. Employment chunks with no subject (the
+  equipment responsibility form) stay open. Spec §12 leaves unlabelled collections
+  open to everyone; this is a deliberate deviation, because a regular employee must not
+  read another person's offer letter (Lesson 10 homework, milestone 2).
+- A non-manager's HR search always carries the same `access_note`, whatever the query
+  and whether or not a playbook chunk would have matched, so the note cannot reveal
+  what the playbook contains.
+- `contracts` is searchable through the knowledge base: the Webex contract is the
+  evidence for the 42-of-40 seat blocker.
+- When a result holds both a memo and a policy, a `precedence_note` says which is
+  newer. Newer or more specific guidance wins (the 7,500 memo over the 5,000 policy).
 """
 
 import logging
@@ -21,16 +34,22 @@ from collections.abc import Callable
 from agent import config
 from agent.model import call_model, embed_text, forced_tool_input
 from mcp_server import opensearch
-from mcp_server.db import is_manager
+from mcp_server.db import CallerAccess, caller_access
 
 log = logging.getLogger(__name__)
 
 CANDIDATES = 20  # retrieve wide
 TOP_K = 5  # rerank narrow
+# At most this many of the TOP_K chunks from one document, so a long document cannot
+# fill every slot: S9 turn 1 got five chunks from two handbook files and missed
+# titles-for-support.md, the page about the caller's own role family.
+MAX_PER_DOC = 2
 RESTRICTED_AUDIENCE = "manager"
 RESTRICTED_CORPUS = "manager_playbook"
+EMPLOYMENT_CORPUS = "employment"
+PLAYBOOK_NOTE = "The manager playbook is not searchable for this caller."
 
-KB_CORPORA = ("it_kb", "policies", "internal_memos")
+KB_CORPORA = ("it_kb", "policies", "internal_memos", "contracts")
 HR_CORPORA = ("handbook", "employment", "policies", "internal_memos", "manager_playbook")
 
 SOURCE_FIELDS = ["text", "source", "section", "doc_id", "chunk_id", "corpus", "audience",
@@ -48,15 +67,31 @@ def access_clauses(manager: bool) -> list[dict]:
     return [{"term": {"audience": RESTRICTED_AUDIENCE}}, {"term": {"corpus": RESTRICTED_CORPUS}}]
 
 
-def build_filter(corpora: tuple[str, ...], manager: bool) -> dict:
+def employment_clause(subjects: tuple[str, ...] | None) -> dict | None:
+    """Excludes employment chunks about someone the caller may not read. None for HR
+    (every subject is readable). Chunks without a subject never match, so they stay
+    open. An empty tuple (unknown caller) excludes every subject's documents."""
+    if subjects is None:
+        return None
+    clause: dict = {"filter": [{"term": {"corpus": EMPLOYMENT_CORPUS}},
+                               {"exists": {"field": "subject_employee_id"}}]}
+    if subjects:
+        clause["must_not"] = [{"terms": {"subject_employee_id": list(subjects)}}]
+    return {"bool": clause}
+
+
+def build_filter(corpora: tuple[str, ...], access: CallerAccess) -> dict:
     clause: dict = {"must": [{"terms": {"corpus": list(corpora)}}]}
-    must_not = access_clauses(manager)
+    must_not = access_clauses(access.manager)
+    employment = employment_clause(access.employment_subjects)
+    if employment and EMPLOYMENT_CORPUS in corpora:
+        must_not.append(employment)
     if must_not:
         clause["must_not"] = must_not
     return {"bool": clause}
 
 
-def build_search_body(vector: list[float], corpora: tuple[str, ...], manager: bool,
+def build_search_body(vector: list[float], corpora: tuple[str, ...], access: CallerAccess,
                       k: int = CANDIDATES) -> dict:
     """The OpenSearch request body. Pure, so tests assert on it without a cluster."""
     return {
@@ -64,7 +99,7 @@ def build_search_body(vector: list[float], corpora: tuple[str, ...], manager: bo
         "query": {"knn": {"vector": {
             "vector": vector,
             "k": k,
-            "filter": build_filter(corpora, manager),
+            "filter": build_filter(corpora, access),
         }}},
         "_source": SOURCE_FIELDS,
     }
@@ -72,7 +107,36 @@ def build_search_body(vector: list[float], corpora: tuple[str, ...], manager: bo
 
 def body_for_caller(query: str, corpora: tuple[str, ...], caller_id: str,
                     embed: Callable[[str], list[float]] = embed_text) -> dict:
-    return build_search_body(embed(query), corpora, is_manager(caller_id))
+    return build_search_body(embed(query), corpora, caller_access(caller_id))
+
+
+def access_summary(corpora: tuple[str, ...], access: CallerAccess) -> dict:
+    """What the filter excluded, in the tool result, so the trace shows it per call."""
+    subjects = access.employment_subjects
+    summary = {
+        "caller_is_manager": access.manager,
+        "caller_is_hr": access.hr,
+        "manager_playbook": "searchable" if access.manager else "excluded by pre-filter",
+    }
+    if EMPLOYMENT_CORPUS in corpora:
+        summary["employment_subjects"] = "all" if subjects is None else list(subjects)
+    return summary
+
+
+def precedence_note(chunks: list[dict]) -> str | None:
+    """Code states which guidance is newer, so the answer does not have to infer it
+    from two dates (S2 turn 9: the 2026-06-25 freeze memo over the procurement policy)."""
+    memos = [c for c in chunks if c.get("doc_type") == "memo" and c.get("last_updated")]
+    policies = [c for c in chunks if c.get("doc_type") == "policy"]
+    if not memos or not policies:
+        return None
+    newest = max(memos, key=lambda c: c["last_updated"])
+    older = sorted({p["source"] for p in policies
+                    if (p.get("last_updated") or "") < newest["last_updated"]})
+    if not older:
+        return None
+    return (f"{newest['source']} ({newest['last_updated']}) is newer than "
+            f"{', '.join(older)}. Where they disagree, the newer, more specific memo wins.")
 
 
 _RERANK_TOOL = {
@@ -139,19 +203,38 @@ def _chunk_result(hit: dict, vector_score: float, rerank_score: float | None) ->
     }
 
 
+def diverse(order: list[int], hits: list[dict], top_k: int,
+            per_doc: int = MAX_PER_DOC) -> list[int]:
+    """The first top_k of `order`, at most `per_doc` per document; if fewer documents
+    than that matched, the remaining slots go to the next chunks in order."""
+    picked, per = [], {}
+    for i in order:
+        doc = hits[i]["_source"].get("doc_id")
+        if per.get(doc, 0) < per_doc:
+            picked.append(i)
+            per[doc] = per.get(doc, 0) + 1
+        if len(picked) == top_k:
+            return picked
+    rest = [i for i in order if i not in picked]
+    return picked + rest[:top_k - len(picked)]
+
+
 def search(query: str, corpora: tuple[str, ...], caller_id: str, top_k: int = TOP_K,
            embed: Callable[[str], list[float]] = embed_text,
            rerank: Callable[[str, list[dict]], dict[int, float]] = rerank_scores) -> dict:
-    manager = is_manager(caller_id)
-    body = build_search_body(embed(query), corpora, manager)
+    access = caller_access(caller_id)
+    body = build_search_body(embed(query), corpora, access)
     hits = opensearch.search(body)
     result = {
         "query": query,
         "index": config.opensearch_index(),
         "corpora": list(corpora),
-        "caller_is_manager": manager,
+        "caller_is_manager": access.manager,
+        "access": access_summary(corpora, access),
         "candidates": len(hits),
     }
+    if RESTRICTED_CORPUS in corpora and not access.manager:
+        result["access_note"] = PLAYBOOK_NOTE
     if not hits:
         return {**result, "reranked": False, "count": 0, "chunks": [],
                 "note": "No document matched this query in the searched collections."}
@@ -166,8 +249,11 @@ def search(query: str, corpora: tuple[str, ...], caller_id: str, top_k: int = TO
         scores, order = {}, list(range(len(hits)))
         reranked, fallback = False, str(exc)
 
-    chunks = [_chunk_result(hits[i], hits[i]["_score"], scores.get(i)) for i in order[:top_k]]
+    chunks = [_chunk_result(hits[i], hits[i]["_score"], scores.get(i))
+              for i in diverse(order, hits, top_k)]
     result.update(reranked=reranked, count=len(chunks), chunks=chunks)
+    if note := precedence_note(chunks):
+        result["precedence_note"] = note
     if fallback:
         result["rerank_fallback_reason"] = fallback
     return result
