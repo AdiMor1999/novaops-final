@@ -23,8 +23,16 @@ the file. A claim without a file is not made.
 | Gated writes are refused without a recorded approval; a replay returns the existing row | `mcp_server/writes.py`, `tests/test_writes.py` | done (task #2) |
 | Index code refuses every index but `OPENSEARCH_INDEX`, and `novaops-kb` by name | `mcp_server/opensearch.py`, `tests/test_index_guard.py` | done (task #2) |
 | Every trace carries `session_id`, `user_id`, `request_id` and `status` | `agent/run.py`, `agent/mcp_tools.py` | done (task #2) |
-| Classify is the router; writes never appear in a loadout | `agent/graph.py`, `agent/policy.py` | planned (task #3) |
-| Durable checkpointer, no `InMemorySaver` anywhere | `agent/run.py`, `tests/` | planned (task #3) |
+| Classify is the router; code derives the scope (`maya`/`webex`) from the intent | `agent/graph.py`, `agent/policy.py` (`SCOPE_OF`), `tests/test_policy.py` | done (task #3) |
+| Each turn binds only its intent's tools; no loadout holds a write or `request_approval` | `agent/policy.py` (`LOADOUTS`, `visible_tools`), `tests/test_policy.py`, `tests/test_graph.py` | done (task #3) |
+| A write becomes visible only through `release_write()`, which opens on an approved, unused, unexpired approval row | `agent/gate.py`, `tests/test_approval.py` | done (task #3) |
+| Tool calls are capped at 6 per turn; one `rearm` reopens reads only; a tool not visible this turn is not run | `agent/graph.py` (`run_tools`, `rearm`), `tests/test_graph.py` | done (task #3) |
+| A planner parse failure is repaired once, then raises `ParseFailed`; no default plan | `agent/structured.py`, `tests/test_graph.py` | done (task #3) |
+| Durable checkpointer injected from outside the graph; a paused approval survives a killed process and resumes in another with the same `request_id` and trace | `agent/run.py` (`open_checkpointer`), `tests/test_approval.py`, `tests/approval_process.py`, `tests/test_banned.py` | done (task #3) |
+| Every graph tool call carries `caller_id`, `user_group` and `request_id` in MCP `_meta` | `agent/graph.py`, `agent/mcp_tools.py`, `tests/test_graph.py` | done (task #3) |
+| `run_turn()` returns one `TurnOutcome` shape; `status` is set by code | `agent/outcome.py`, `agent/run.py`, `tests/test_run_status.py` | done (task #3) |
+| Golden illustrative tool names are mapped to ours in one module | `evals/tool_map.py`, `tests/test_s1_live.py` | done (task #3) |
+| `S1-quick-policy` passes end to end (intent, tools, facts, turn-1 citation) | `tests/test_s1_live.py` | done (task #3) |
 | `manager_playbook` is unreachable for non-managers (pre-filter) | `mcp_server/retrieval.py`, `tests/test_prefilter.py`, `tests/test_live_leak.py` | filter done (task #2); Maya cases in task #4 |
 | Maya returns `OnboardingChecklist` and a typed `Handoff` | `agent/models.py` | planned (task #4) |
 | Webex reuses `T001` and `AR001` and pauses for approval | `mcp_server/server.py`, `agent/graph.py` | planned (task #5) |
@@ -55,7 +63,7 @@ python -m scripts.create_index        # novaops-final-kb, once (--recreate to re
 python -m scripts.ingest              # 102 files, 7 collections; prints chunks per corpus
 python -m mcp_server                  # MCP server on MCP_SERVER_URL (port 9880)
 python -m agent.ask "What's the NovaOps policy on using a personal laptop for work?" \
-    --caller E010 --group UG_REGULAR --thread t1
+    --caller E010 --group UG_REGULAR --thread t1     # prints scope, visible tools and the trace URL
 python -m pytest -q                   # integration tests skip without AWS credentials
 ```
 
@@ -82,7 +90,13 @@ the lesson folders. Rows are added as each module is copied.
 | `mcp_server/documents.py`, `scripts/ingest.py` | `lesson-07-rag-advanced/code/01-opensearch-setup/ingest.py`, `02-filtering/ingest.py` (`parse_frontmatter`, `chunk_document`) | All seven collections. Metadata from front matter or inline header lines. Chunks on `##` sections (the sliding window only inside long sections). Stable ids. Re-runnable: old chunks found by `doc_id` and deleted first, because Serverless rejects caller-set `_id`s. No subject tagging. |
 | `mcp_server/retrieval.py` | `lesson-07-rag-advanced/code/02-filtering/retrieval.py` (`build_filter`), `03-reranking/{retrieval,reranker}.py` | Access clause from manager status (`manager_id`), as `must_not` inside the k-NN filter. Corpus scope per tool. 20 candidates reranked to 5; a reranker parse failure falls back to vector order with `reranked: false`. Lesson 10's FAISS `rag.py` is not copied. |
 | `agent/mcp_tools.py` | `lesson-12-eval-loop-engineering/samples/02-coding-loop/agent-hardened/agent.py` (`load_tools`, `safe_tool_result`) | Sessions from `langchain-mcp-adapters`; our own `call_tool()` because the adapter does not forward `_meta`. One `tool:<name>` span per call. |
-| `agent/run.py`, `agent/ask.py` | `lesson-11-observability-and-evals/code/02-instrument-agent/run.py` | `run_turn()` with the final signature: root span per turn, `propagate_attributes(session_id, user_id, metadata)`, status set by code, flush in `finally`. Milestone 1 body only; task #3 swaps in the graph. |
+| `agent/run.py`, `agent/ask.py` | `lesson-11-observability-and-evals/code/02-instrument-agent/run.py`; resume loop from `lesson-09-agentic-frameworks/code/03-human-in-the-loop/graph.py` (`run`) | `run_turn()` with the final signature: root span per turn, `propagate_attributes(session_id, user_id, metadata)`, flush in `finally`. Opens an injected `AsyncSqliteSaver` and the MCP session, builds the graph, and resumes a paused thread with `Command(resume=...)` instead of asking a terminal. A resume keeps the checkpoint's `request_id` (a different one raises `RequestIdMismatch`) and opens its root span in the paused trace. Returns `TurnOutcome`. |
+| `agent/graph.py` | `lesson-10-context-engineering/code/02-dynamic-tool-loadout/graph.py`, `03-history-distillation/graph.py`; `lesson-09-agentic-frameworks/code/03-human-in-the-loop/graph.py` (`human_review`); `lesson-11-observability-and-evals/code/02-instrument-agent/graph.py` (callback) | `plan`/`select`/`model` become `classify`/`scope`/`gather`. The checkpointer is a parameter. Our `tools` node calls `as_langchain_tools()` instead of `ToolNode`, caps calls at 6 and refuses tools not visible this turn. Approval path: `request_approval` (code calls the MCP tool) → `await_approval` (`interrupt()`) → `write_gate` (`release_write()`). Earlier turns reach the model as text, because Bedrock refuses `toolUse` blocks in a call that binds no tools. Distillation is task #4. |
+| `agent/policy.py` | `lesson-10-context-engineering/code/02-dynamic-tool-loadout/stage02_policy.py` | Same eight intents. `TurnPlan` fields renamed (`intent`, `facts`, `active_constraints`, `needs_tools`, `action_confirmed`). Adds `SCOPE_OF`, loadouts for `get_team`, `get_access_requests`, `get_approvals`. `select_tools()` no longer adds `create_access_request` on `action_confirmed`. |
+| `agent/structured.py` | `lesson-12-eval-loop-engineering/samples/02-coding-loop/agent-hardened/agent.py` (`parse_with_repair`) | Raises `ParseFailed` (named) instead of `StructuredOutputError`; replaces Lesson 10's silent `TurnPlan` fallback. |
+| `agent/gate.py` | `lesson-10-context-engineering/code/02-dynamic-tool-loadout/stage02_policy.py` (`select_tools` write release) | The release reads the approval row over MCP (`get_approvals`) instead of trusting `action_confirmed`. Fails closed on a read error. |
+| `agent/outcome.py` | `agent/run.py` from task #2 (`cited_labels`, `_status`) | `TurnOutcome`. Labels are checked against every tool result in the thread, so a follow-up can cite turn 1. Status adds `blocked` (rejected approval) and the shut-gate cases. |
+| `evals/tool_map.py` | none (new) | Golden illustrative tool names to ours. Forbidden tools are matched by exact name only. |
 | `scripts/check_langfuse.py` | `lesson-11-observability-and-evals/code/01-langfuse-setup/01-connect-langfuse.py` | Uses the shared config loader. |
 | `scripts/reseed.py` | none (new) | Deletes and rebuilds the DB from the course `schema.sql` and `seed.sql`, then adds the side tables. |
 
@@ -165,7 +179,7 @@ Each decision names the lesson principle behind it. "Ours" marks a decision no l
 | Decision | Lesson principle |
 | --- | --- |
 | Langfuse callback on the compiled graph. Spans `classify`, `scope`, `tool:<name>`, `write_gate`, `answer`. `flush()` on exit. | L11, L14 |
-| Deterministic checks first, judges second. Illustrative golden fields mapped to our tool names in the scorer only. | L11, L8 |
+| Deterministic checks first, judges second. Illustrative golden fields mapped to our tool names once, in `evals/tool_map.py`. | L11, L8 |
 | Project checks under `evals/`: constraint carry, closed branch, citations, replay, durable pause, write gate. | L11, spec §12 |
 | Develop on `GOLDEN-DATASETS.json`. `EVALUATION-INPUTS.yaml` runs once with a fresh seed per case. | L11, L12 |
 | Root and nested `CLAUDE.md`, a hook protecting eval targets and fixtures. | L5, L12 |
