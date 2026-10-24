@@ -12,6 +12,22 @@ from agent.run import RequestIdMismatch, run_turn
 from tests.agent_stubs import ScriptedModel, ScriptedPlanner, call, memory_session, plan, say, use_stubs
 from tests.conftest import REPO
 
+# A confirmed access request goes anywhere only for a subject a get_employee row in the
+# thread verifies (agent/handoff.py), so each approval test looks Rachel up first.
+LOOKUP = plan("employee_lookup")
+GO_AHEAD = plan("access_request", action_confirmed=True, subject_employee_id="E010",
+                system="Webex")
+
+
+def lookup_replies():
+    return [call("get_employee", query="E010"), say("Rachel Stein is E010. [db:employees#E010]")]
+
+
+async def look_up_rachel(thread_id: str, request_id: str | None = None):
+    return await run_turn("Look up Rachel Stein.", caller_id="E007", user_group="UG_IT",
+                          thread_id=thread_id, request_id=request_id)
+
+
 CONFIG = {"thread_id": "t-gate", "caller_id": "E007", "user_group": "UG_IT",
           "request_id": "REQ-GATE"}
 TODAY = "2026-07-01"
@@ -82,8 +98,10 @@ def test_paused_thread_survives_a_killed_process_and_resumes_in_another(seeded, 
 
 
 async def test_paused_thread_rejects_a_different_request_id(seeded, monkeypatch):
-    use_stubs(monkeypatch, ScriptedPlanner(plan("access_request", action_confirmed=True)),
-              ScriptedModel(call("get_approvals", record_id="AR001"), say("Waits on AP001.")))
+    use_stubs(monkeypatch, ScriptedPlanner(LOOKUP, GO_AHEAD),
+              ScriptedModel(*lookup_replies(), call("get_approvals", record_id="AR001"),
+                            say("Waits on AP001.")))
+    await look_up_rachel("t-mismatch", "REQ-0")
     paused = await run_turn("Go ahead.", caller_id="E007", user_group="UG_IT",
                             thread_id="t-mismatch", request_id="REQ-1")
     assert paused.status == "pending"
@@ -93,8 +111,10 @@ async def test_paused_thread_rejects_a_different_request_id(seeded, monkeypatch)
 
 
 async def test_resume_while_still_undecided_stays_pending(seeded, monkeypatch, conn):
-    use_stubs(monkeypatch, ScriptedPlanner(plan("access_request", action_confirmed=True)),
-              ScriptedModel(call("get_approvals", record_id="AR001"), say("Waits on AP001.")))
+    use_stubs(monkeypatch, ScriptedPlanner(LOOKUP, GO_AHEAD),
+              ScriptedModel(*lookup_replies(), call("get_approvals", record_id="AR001"),
+                            say("Waits on AP001.")))
+    await look_up_rachel("t-wait")
     first = await run_turn("Go ahead.", caller_id="E007", user_group="UG_IT", thread_id="t-wait")
     again = await run_turn("Is it done?", caller_id="E007", user_group="UG_IT", thread_id="t-wait")
     assert first.status == again.status == "pending"
@@ -105,8 +125,10 @@ async def test_resume_while_still_undecided_stays_pending(seeded, monkeypatch, c
 
 async def test_rejected_approval_ends_blocked_without_a_write(seeded, monkeypatch, conn):
     from mcp_server.writes import record_approval_decision
-    use_stubs(monkeypatch, ScriptedPlanner(plan("access_request", action_confirmed=True)),
-              ScriptedModel(call("get_approvals", record_id="AR001"), say("Waits on AP001.")))
+    use_stubs(monkeypatch, ScriptedPlanner(LOOKUP, GO_AHEAD),
+              ScriptedModel(*lookup_replies(), call("get_approvals", record_id="AR001"),
+                            say("Waits on AP001.")))
+    await look_up_rachel("t-reject")
     await run_turn("Go ahead.", caller_id="E007", user_group="UG_IT", thread_id="t-reject")
     record_approval_decision("AP001", "rejected", "E006", reason="No seats this quarter.")
     out = await run_turn("Well?", caller_id="E007", user_group="UG_IT", thread_id="t-reject")

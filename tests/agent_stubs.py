@@ -36,7 +36,8 @@ def say(text: str) -> AIMessage:
 
 
 class ScriptedPlanner:
-    """Returns the scripted results in order. None means a parse failure."""
+    """Returns the scripted results in order. None means a parse failure. Also stands
+    in for the distiller and the checklist model, which have the same shape."""
 
     def __init__(self, *plans):
         self.plans = list(plans)
@@ -57,7 +58,7 @@ class ScriptedModel:
         self.bound: list[list[str]] = []
         self.seen: list[list] = []
 
-    def bind_tools(self, tools):
+    def bind_tools(self, tools, **_kwargs):
         return _Bound(self, sorted(t.name for t in tools))
 
     async def ainvoke(self, messages):
@@ -84,7 +85,13 @@ async def memory_session():
         yield client
 
 
-def use_stubs(monkeypatch, planner, model):
+def use_stubs(monkeypatch, planner, model, *, distiller=None, checklist=None, port=None):
+    """`distiller` and `checklist` default to None, which leaves those nodes out of
+    the graph. `port` replaces the McpWebexPort; without it the real port runs against
+    the in-memory server."""
     import agent.run
-    monkeypatch.setattr(agent.run, "make_models", lambda: {"model": model, "planner": planner})
+    monkeypatch.setattr(agent.run, "make_models", lambda: {
+        "model": model, "planner": planner, "distiller": distiller, "checklist": checklist})
     monkeypatch.setattr(agent.run, "mcp_session", memory_session)
+    if port is not None:
+        monkeypatch.setattr(agent.run, "make_port", lambda _session, _config: port)

@@ -73,5 +73,11 @@ resume time. It is never exposed to the model and never appears in any loadout.
   who manages nobody (no employee has `manager_id` equal to their id) gets
   `must_not: {term: {audience: "manager"}}`. Documents without `audience` stay readable. If
   manager status cannot be determined, exclude `manager` documents.
+- A second clause in the same filter guards employment documents: a chunk with a
+  `subject_employee_id` is readable only by that subject, UG_HR callers (from the
+  employee row, not `_meta`) and the subject's manager. A non-manager's HR search
+  always returns the same `access_note`, whatever the query.
+- Read tools add a `citation` label to every row (`[db:<table>#<id>]`) and a
+  `result_citation` (`[db:<table>]`) to the result.
 - Only the index named by `OPENSEARCH_INDEX`. Index-management code refuses any other name and
   refuses `novaops-kb` by name.

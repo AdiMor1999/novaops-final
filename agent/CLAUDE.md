@@ -43,7 +43,14 @@ One LangGraph graph serves both scopes. Starting code:
   forced final tool call and validated locally. One repair attempt, then `ParseFailed`. No
   silent default, and no `result["parsed"] or TurnPlan(...)` fallback.
 - `status` is set by code from tool results. `AccessDecision` never says access was granted.
-- Every factual claim cites a `[source#section]` label from a retrieved chunk.
+- Every fact sentence on a turn with tool results cites a label a tool returned:
+  `[source#section]` for a chunk, `[db:<table>#<id>]` for a row, `[db:<table>]` for a
+  whole result. `uncited_sentences()` in `outcome.py` is the check; one repair call, then
+  `needs_human`.
+- A confirmed `access_request` is routed on the subject's `get_employee` row already in
+  the thread (`handoff.py`): `preboarding` → the Maya handoff through `WebexPort`, any
+  other verified subject → the approval node, no match → `needs_human`. The port is
+  injected by `run_turn()` (`make_port`); tests use `FakeWebexPort`.
 
 ## Entry point
 

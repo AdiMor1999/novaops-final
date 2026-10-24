@@ -5,7 +5,7 @@ Starting code: Lesson 10 `server/db.py`. Changes: the database is a file built b
 each call opens its own connection so the server and application code (approval
 decisions) can share the file, dates come from `NOVAOPS_TODAY`, and the reads the
 workflows need but Lesson 10 lacked are added: `get_access_requests`, `get_approvals`,
-`get_team` and `is_manager`.
+`get_team`, `is_manager` and `caller_access`.
 
 Writes live in `writes.py`.
 """
@@ -13,6 +13,7 @@ Writes live in `writes.py`.
 import json
 import sqlite3
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -235,18 +236,48 @@ def get_team(conn, manager_id: str) -> list[dict]:
     ))]
 
 
-def is_manager(caller_id: str, path: Path | None = None) -> bool:
-    """True when some employee's manager_id is this caller (spec §12). user_group is not
-    used: E018 manages people and is UG_REGULAR. An unknown caller, a missing database
-    or a query error all count as not a manager, so the filter fails closed."""
+@dataclass(frozen=True)
+class CallerAccess:
+    """What one caller may retrieve. Read from the database, never from `_meta`: the
+    user group in `_meta` is what the agent claims, the row is what NovaOps records."""
+
+    caller_id: str
+    manager: bool
+    hr: bool
+    reports: tuple[str, ...] = ()
+
+    @property
+    def employment_subjects(self) -> tuple[str, ...] | None:
+        """Subjects whose employment documents this caller may read. None means every
+        subject (HR). Otherwise the caller and their direct reports."""
+        if self.hr:
+            return None
+        return (self.caller_id, *self.reports)
+
+
+def caller_access(caller_id: str, path: Path | None = None) -> CallerAccess:
+    """Manager status from `manager_id` (spec §12), HR status from the caller's own
+    `user_group_id`. An unknown caller, a missing database or a query error give no
+    manager rights, no HR rights and no reports, so the filter fails closed: at most
+    the caller's own employment documents stay readable."""
     try:
         with session(path) as conn:
-            row = conn.execute(
-                "SELECT 1 FROM employees WHERE manager_id = ? LIMIT 1", (caller_id,)
-            ).fetchone()
+            row = conn.execute("SELECT user_group_id FROM employees WHERE employee_id = ?",
+                               (caller_id,)).fetchone()
+            reports = tuple(r[0] for r in conn.execute(
+                "SELECT employee_id FROM employees WHERE manager_id = ? ORDER BY employee_id",
+                (caller_id,)))
     except (sqlite3.Error, DatabaseMissing):
-        return False
-    return row is not None
+        return CallerAccess(caller_id, manager=False, hr=False)
+    if row is None:
+        return CallerAccess(caller_id, manager=False, hr=False)
+    return CallerAccess(caller_id, manager=bool(reports), hr=row[0] == "UG_HR", reports=reports)
+
+
+def is_manager(caller_id: str, path: Path | None = None) -> bool:
+    """True when some employee's manager_id is this caller (spec §12). user_group is not
+    used: E018 manages people and is UG_REGULAR. Fails closed like caller_access()."""
+    return caller_access(caller_id, path).manager
 
 
 def employee_names(path: Path | None = None) -> dict[str, str]:
