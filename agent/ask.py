@@ -6,7 +6,6 @@
 
 import argparse
 import asyncio
-import json
 
 from agent.run import run_turn
 
@@ -24,13 +23,16 @@ def main() -> None:
     result = asyncio.run(run_turn(args.message, caller_id=args.caller, user_group=args.group,
                                   thread_id=args.thread, request_id=args.request_id))
     if args.json:
-        print(json.dumps(result, indent=2))
+        print(result.model_dump_json(indent=2))
         return
-    print(result["answer"])
-    print(f"\nstatus: {result['status']}   request_id: {result['request_id']}")
-    print(f"citations: {', '.join(result['citations']) or '(none)'}")
-    if result.get("trace_url"):
-        print(f"trace: {result['trace_url']}")
+    print(result.answer)
+    print(f"\nstatus: {result.status}   request_id: {result.request_id}   "
+          f"scope: {result.scope}   intent: {result.intent}")
+    print(f"visible tools: {', '.join(result.visible_tools) or '(none)'}")
+    print(f"tools called: {', '.join(result.tools_called) or '(none)'}")
+    print(f"citations: {', '.join(result.citations) or '(none)'}")
+    if result.trace_url:
+        print(f"trace: {result.trace_url}")
 
 
 if __name__ == "__main__":

@@ -12,6 +12,8 @@ botocore==1.43.118
 opensearch-py==3.2.0
 requests-aws4auth==1.4.0
 langfuse==4.18.0
+# langfuse.langchain.CallbackHandler imports langchain; Lesson 11 installs it unpinned.
+langchain==1.4.7
 python-dotenv==1.2.4
 pydantic==2.14.1
 # Bounded retries over should_retry (Lesson 12 call_with_retry).
