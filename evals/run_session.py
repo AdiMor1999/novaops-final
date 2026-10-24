@@ -16,14 +16,29 @@ Exit code 1 if any turn has a problem.
 import argparse
 import asyncio
 import json
+import re
 import sys
 import uuid
 
 from agent import config
 from agent.run import run_turn
-from evals.session_checks import binding_checks, project_checks
+from evals.session_checks import WRITE_GATE_SESSIONS, binding_checks, project_checks
 from evals.tool_matrix import golden_sessions
+from mcp_server import db
 from scripts.reseed import reseed
+
+
+def session_caller(session: dict) -> tuple[str, str]:
+    """(caller id, user group). S2 and S9 state both. The other sessions name the
+    caller only in `persona` ("Sara Ben-David (E004, ..."), so the id comes from there
+    and the group from that employee's row, never from a guess."""
+    if session.get("caller_id"):
+        return session["caller_id"], session["caller_group"]
+    found = re.search(r"\((E\d{3})\b", session["persona"])
+    if found is None:
+        raise ValueError(f"{session['id']} names no caller")
+    with db.session() as conn:
+        return found[1], db.require_employee(conn, found[1])["user_group_id"]
 
 
 def turn_record(session_id: str, turn: dict, outcome) -> dict:
@@ -41,6 +56,9 @@ def turn_record(session_id: str, turn: dict, outcome) -> dict:
         "checklist": outcome.checklist.model_dump() if outcome.checklist else None,
         "handoff": outcome.handoff,
         "approval_id": outcome.approval_id,
+        "approvals": outcome.approvals,
+        "access_decision": (outcome.access_decision.model_dump()
+                            if outcome.access_decision else None),
         "answer": outcome.answer,
         "trace_url": outcome.trace_url,
         "problems": problems,
@@ -49,16 +67,32 @@ def turn_record(session_id: str, turn: dict, outcome) -> dict:
 
 async def run_session(session: dict, *, thread_id: str | None = None) -> list[dict]:
     thread_id = thread_id or f"{session['id'].split('-')[0]}-{uuid.uuid4().hex[:8]}"
+    caller_id, user_group = session_caller(session)
+    with db.session() as conn:
+        before = row_counts(conn)
     records = []
     for turn in session["turns"]:
-        outcome = await run_turn(turn["user"], caller_id=session["caller_id"],
-                                 user_group=session["caller_group"], thread_id=thread_id,
+        outcome = await run_turn(turn["user"], caller_id=caller_id,
+                                 user_group=user_group, thread_id=thread_id,
                                  request_id=f"{session['id'].split('-')[0]}-t{turn['n']}")
         record = turn_record(session["id"], turn, outcome)
         record["thread_id"] = thread_id
         records.append(record)
         print_turn(record)
+    with db.session() as conn:
+        after = row_counts(conn)
+    if session["id"].startswith(WRITE_GATE_SESSIONS) and after != before:
+        # The write-gate sessions reuse T001, AR001, AP001 and AP002: any new row is a
+        # duplicate (spec §9 "replaying the case creates no second row").
+        records[-1]["problems"].append(f"rows changed over the session: {before} -> {after}")
+        print(f"       - rows changed over the session: {before} -> {after}", flush=True)
+    records[-1]["row_counts"] = {"before": before, "after": after}
     return records
+
+
+def row_counts(conn) -> dict[str, int]:
+    return {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+            for t in ("tickets", "access_requests", "approvals")}
 
 
 def print_turn(record: dict) -> None:

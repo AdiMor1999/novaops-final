@@ -107,6 +107,110 @@ class WebexHandoff(BaseModel):
     idempotency_key: str
 
 
+# What an AccessDecision must never say (rubric WF_WEBEX_001 `must_not_include`,
+# spec §6.5). Checked on the model's text, so a draft that says it is refused and
+# repaired once like any other validation error.
+FORBIDDEN_CLAIMS = re.compile(
+    r"\b(access (has been|was|is now|is already) (granted|provisioned|given)|"
+    r"already (been )?granted|already has access|has been provisioned|"
+    r"no approval (is )?(needed|required)|only a password reset|"
+    r"(created|filed|opened) a (new|second|duplicate) (ticket|access request))\b",
+    re.IGNORECASE)
+
+
+BRACES = str.maketrans("{}", "[]")
+
+
+class ObservedFact(BaseModel):
+    statement: str = Field(description="One sentence stating a fact from the tool results.")
+    citations: list[EvidenceCitation] = Field(
+        min_length=1, description="Labels of the evidence, copied exactly from a tool result.")
+
+    @field_validator("citations", mode="before")
+    @classmethod
+    def _one_label_each(cls, value):
+        """Nova Lite sometimes types a brace for a bracket ('[x.md#Section}', the Rachel
+        scenario) and packs two labels into one string ('[db:tickets#T001}],[db:access_
+        requests#AR001]', S6 turn 4); the repair call repeated both. Braces become
+        brackets and each label becomes its own citation. Nothing else is rewritten:
+        every label is still checked against the labels tools returned
+        (agent/records.py), and a string with no label still fails."""
+        if not isinstance(value, list):
+            return value
+        out = []
+        for item in value:
+            text = item.get("label") if isinstance(item, dict) else item
+            found = LABEL.findall(text.translate(BRACES)) if isinstance(text, str) else []
+            if found:
+                out.extend({"label": label} for label in found)
+            else:
+                out.append(item)
+        return out
+
+
+class DecisionDraft(BaseModel):
+    """The part of an AccessDecision the model writes, through a forced
+    `submit_access_decision` call. Everything else is filled in by code."""
+
+    observed_facts: list[ObservedFact] = Field(
+        min_length=1, description="What the records and documents show, one fact each.")
+    recommended_next_steps: list[str] = Field(
+        min_length=1, description="What people must do next, and who. Not done yet.")
+
+    @model_validator(mode="after")
+    def _claims_nothing_forbidden(self):
+        texts = [f.statement for f in self.observed_facts] + self.recommended_next_steps
+        for text in texts:
+            if hit := FORBIDDEN_CLAIMS.search(text):
+                raise ValueError(f"{text!r} claims {hit.group(0)!r}, which no tool result "
+                                 "shows; access is never granted by this workflow")
+        return self
+
+    def labels(self) -> set[str]:
+        return {c.label for f in self.observed_facts for c in f.citations}
+
+
+class RecordRef(BaseModel):
+    """An existing row this workflow reused instead of creating a new one."""
+
+    record_type: Literal["ticket", "access_request"]
+    record_id: str
+    status: str
+    citation: EvidenceCitation
+
+
+class ActionTaken(BaseModel):
+    """One write-path tool result with a row id. Built by code, never by the model."""
+
+    tool: Literal["request_approval", "create_access_request", "create_ticket"]
+    record_id: str
+    reused: bool
+    detail: str
+    citation: EvidenceCitation
+
+
+class AccessDecision(BaseModel):
+    """The Webex return contract (spec §6.5). Observed facts and next steps come from a
+    validated model draft; the rest is set by code from tool results, so the decision
+    cannot list an action no tool performed or a status the tools do not support."""
+
+    employee_id: str = Field(pattern=r"^E\d{3}$")
+    system: str
+    status: Literal["completed", "blocked", "pending", "needs_human", "failed"]
+    observed_facts: list[ObservedFact]
+    reused_records: list[RecordRef] = Field(default_factory=list)
+    actions_taken: list[ActionTaken] = Field(default_factory=list)
+    recommended_next_steps: list[str]
+    blocking_reason: str | None = None
+    access_granted: Literal[False] = False
+
+    @model_validator(mode="after")
+    def _blocked_has_reason(self):
+        if self.status == "blocked" and not (self.blocking_reason or "").strip():
+            raise ValueError("a blocked decision gives its blocking_reason")
+        return self
+
+
 class PendingAccessResult(BaseModel):
     """What the Webex side answers. It is always pending: Maya cannot be told that
     access was granted, because filing and granting happen only on the Webex side."""

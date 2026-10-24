@@ -7,11 +7,15 @@ them apart. The subject's employee record does:
 - subject `preboarding` (E001, Maya Cohen, before her start date) → a Maya handoff
   through `WebexPort`. Maya owns no write; the Webex side decides and files.
 - any other verified subject (E010 in S6/S8) → the Webex approval node, as in M2.
-- no `get_employee` row earlier in this thread for the id the planner named → the
-  turn ends `needs_human` and nothing is handed off or requested.
+- no subject that a `get_employee` row identifies → the turn ends `needs_human` and
+  nothing is handed off or requested.
 
 The planner names the subject; code accepts it only when it matches a row a tool
-already returned in this thread. A name or an id the model made up matches nothing.
+returned. Task #5: when the thread has no such row yet (the Rachel scenario, or "go
+ahead" for someone never looked up), the graph's `lookup_subject` node calls
+`get_employee` with the id or name the planner named, from code, and routes on the
+result. One match routes; no match or several matches end `needs_human`. A name or
+an id the model made up matches nothing.
 
 Starting code: none. The Lesson 10 homework (milestone 4) specifies the handoff and
 its idempotency key; the routing rule is ours (README decisions table).
@@ -86,11 +90,46 @@ def system_named_in_message(messages: list) -> dict | None:
     return next(iter(found.values())) if len(found) == 1 else None
 
 
+def subject_in_thread(messages: list, plan: TurnPlan) -> dict | None:
+    """The subject's `get_employee` row: by the id the planner named, else the one row
+    whose full name it named. Two people with that name verify nobody."""
+    if row := verified_subject(messages, plan.subject_employee_id):
+        return row
+    if not plan.subject_name:
+        return None
+    wanted = plan.subject_name.strip().lower()
+    found = {row["employee_id"]: row for result in tool_results(messages, "get_employee")
+             for row in result.get("rows", []) if row.get("full_name", "").lower() == wanted}
+    return next(iter(found.values())) if len(found) == 1 else None
+
+
+def subject_query(plan: TurnPlan, messages: list) -> str | None:
+    """What `lookup_subject` asks `get_employee` for: the id, else the name the planner
+    named. None when no lookup is due: not a confirmed access request, the thread
+    already verifies the subject, or the planner named nobody."""
+    if not (plan.action_confirmed and plan.intent == "access_request"):
+        return None
+    if subject_in_thread(messages, plan) is not None:
+        return None
+    named = (plan.subject_employee_id or plan.subject_name or "").strip()
+    return named or None
+
+
+def lookup_outcome(rows: list[dict]) -> tuple[str | None, str]:
+    """(the subject's id, why not) from the code lookup's rows."""
+    if len(rows) == 1:
+        return rows[0]["employee_id"], ""
+    if not rows:
+        return None, "no employee matches"
+    names = ", ".join(f"{r['full_name']} ({r['employee_id']})" for r in rows)
+    return None, f"several employees match: {names}"
+
+
 def action_route(plan: TurnPlan, messages: list) -> Route | None:
     """None for every turn that is not a confirmed access request."""
     if not (plan.action_confirmed and plan.intent == "access_request"):
         return None
-    subject = verified_subject(messages, plan.subject_employee_id)
+    subject = subject_in_thread(messages, plan)
     if subject is None:
         return "unverified"
     return "handoff" if subject.get("status") == PREBOARDING else "approval"
@@ -119,7 +158,7 @@ def justification(messages: list, subject: dict, system: dict) -> str:
 
 def build_handoff(messages: list, plan: TurnPlan, configurable: dict) -> WebexHandoff | str:
     """The typed handoff, or the reason it cannot be built."""
-    subject = verified_subject(messages, plan.subject_employee_id)
+    subject = subject_in_thread(messages, plan)
     if subject is None:
         return f"No employee record in this conversation matches {plan.subject_employee_id!r}."
     system = verified_system(messages, plan.system) or (

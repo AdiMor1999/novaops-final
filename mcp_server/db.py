@@ -11,6 +11,7 @@ Writes live in `writes.py`.
 """
 
 import json
+import re
 import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -124,6 +125,28 @@ def get_employee(conn, query: str) -> list[dict]:
         (query, query, f"%{query}%"),
     ))
     return [_decode_systems(e) for e in found]
+
+
+def _name_words(text: str) -> list[str]:
+    return [w for w in re.findall(r"[a-z]+", text.lower()) if len(w) >= 3]
+
+
+def similar_employees(conn, query: str) -> list[dict]:
+    """The fallback when no name contains the whole query. Users type 'rrachel stein'
+    (S8) and 'rrachel steins' (S7); a substring match finds nobody, and the model then
+    reports that Rachel does not exist. A name word counts when it sits inside a query
+    word or the other way round; only the employees with the most such words return,
+    so 'rrachel steins' gives Rachel Stein and not Rachel Green."""
+    words = _name_words(query)
+    if not words:
+        return []
+    scored = []
+    for row in rows(conn.execute(f"SELECT {EMPLOYEE_FIELDS} FROM employees ORDER BY full_name")):
+        score = sum(any(t in w or w in t for w in words) for t in _name_words(row["full_name"]))
+        if score:
+            scored.append((score, row))
+    best = max((score for score, _ in scored), default=0)
+    return [_decode_systems(row) for score, row in scored if score == best]
 
 
 def check_software_subscription(conn, software: str, today: date) -> list[dict]:

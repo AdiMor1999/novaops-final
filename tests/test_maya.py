@@ -102,24 +102,34 @@ async def test_real_port_persists_one_pending_approval_and_replay_adds_none(seed
     assert sum(getattr(p, "calls", 0) for p in made) == 1
 
 
-async def test_unverified_subject_ends_needs_human_with_no_port_call(seeded, monkeypatch, conn):
+async def test_subject_never_looked_up_is_looked_up_by_code_then_handed_off(seeded, monkeypatch,
+                                                                         conn):
+    """Task #5 replaces PR #4's needs_human: code calls get_employee for the id the
+    planner named, and one match routes. E001 is preboarding, so it is a handoff."""
+    port = FakeWebexPort()
+    use_stubs(monkeypatch, ScriptedPlanner(SEATS, FILE_IT), ScriptedModel(*setup_replies()[2:]),
+              port=port)
+    await run_turn("Is a Webex seat available?", thread_id="t-lookup", **HR)
+    out = await run_turn(TURN_10, thread_id="t-lookup", **HR)  # no get_employee row yet
+    assert out.tools_called == ["get_employee"]
+    assert out.status == "pending" and len(port.calls) == 1
+    assert port.calls[0].subject_employee_id == "E001"
+
+
+@pytest.mark.parametrize("subject, why", [
+    ({"subject_employee_id": "E999"}, "no employee matches"),
+    ({"subject_name": "Maya"}, "several employees match: Maya Cohen (E001), Maya Rosen (E020)"),
+])
+async def test_lookup_with_no_match_or_several_ends_needs_human(seeded, monkeypatch, conn,
+                                                                subject, why):
     port = FakeWebexPort()
     before = approvals(conn)
-    use_stubs(monkeypatch, ScriptedPlanner(FILE_IT), ScriptedModel(), port=port)
-    out = await run_turn(TURN_10, thread_id="t-unverified", **HR)  # no get_employee row yet
-    assert out.status == "needs_human" and port.calls == [] and out.tools_called == []
-    assert "Nothing was filed" in out.answer and approvals(conn) == before
-
-
-async def test_made_up_subject_id_is_not_verified(seeded, monkeypatch):
-    port = FakeWebexPort()
-    other = plan("access_request", action_confirmed=True, subject_employee_id="E020",
-                 system="Webex")  # Maya Rosen: never looked up in this thread
-    use_stubs(monkeypatch, ScriptedPlanner(LOOKUP, SEATS, other), ScriptedModel(*setup_replies()),
-              port=port)
-    await two_setup_turns("t-other-maya")
-    out = await run_turn(TURN_10, thread_id="t-other-maya", **HR)
-    assert out.status == "needs_human" and port.calls == []
+    ask = plan("access_request", action_confirmed=True, system="Webex", **subject)
+    use_stubs(monkeypatch, ScriptedPlanner(ask), ScriptedModel(), port=port)
+    out = await run_turn(TURN_10, thread_id="t-no-subject", **HR)
+    assert out.status == "needs_human" and out.tools_called == ["get_employee"]
+    assert why in out.answer and "Nothing was filed" in out.answer
+    assert port.calls == [] and out.approval_id is None and approvals(conn) == before
 
 
 async def test_active_subject_takes_the_webex_approval_path_not_a_handoff(seeded, monkeypatch):

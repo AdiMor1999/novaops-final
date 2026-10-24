@@ -23,15 +23,20 @@ from agent.policy import RELEASES
 @dataclass(frozen=True)
 class GateDecision:
     open: bool
-    state: str  # approved | pending | rejected | consumed | expired | missing | error
+    state: str  # approved | replay | pending | rejected | consumed | expired | missing | error | unverified
     reason: str
     approval: dict | None = None
     released: list[str] = field(default_factory=list)
 
 
-def judge_approval(row: dict | None, today: str) -> GateDecision:
+def judge_approval(row: dict | None, today: str, replay: bool = False) -> GateDecision:
     """Pure decision over one get_approvals row. Kept separate so it is testable
-    without a server."""
+    without a server.
+
+    `replay` is set by the graph when `request_approval` said the row is bound to this
+    same workflow request (task #5): a consumed approval then opens the gate for that
+    request's replay, which the server answers with the row it already returned. Any
+    other request still finds it consumed, and the server refuses a new action."""
     if row is None:
         return GateDecision(False, "missing", "No approval row exists for this action.")
     status = row.get("status")
@@ -41,6 +46,10 @@ def judge_approval(row: dict | None, today: str) -> GateDecision:
         return GateDecision(False, "pending",
                             f"{row['approval_id']} is {status}; no decision yet.", row)
     if row.get("consumed"):
+        if replay:
+            return GateDecision(True, "replay",
+                                f"{row['approval_id']} was used by this request; replaying it.",
+                                row, RELEASES.get(row.get("request_type"), []))
         return GateDecision(False, "consumed", f"{row['approval_id']} was already used.", row)
     if not row.get("expires_on") or row["expires_on"] < today:
         return GateDecision(False, "expired",
@@ -51,7 +60,7 @@ def judge_approval(row: dict | None, today: str) -> GateDecision:
 
 
 async def release_write(session, configurable: dict, *, record_id: str,
-                        approval_id: str | None = None) -> GateDecision:
+                        approval_id: str | None = None, replay: bool = False) -> GateDecision:
     """Open the gate only against a persisted approval row for `record_id`.
 
     With `approval_id`, only that row counts; without it, the newest row for the
@@ -64,4 +73,4 @@ async def release_write(session, configurable: dict, *, record_id: str,
     rows = result.get("rows", [])
     if approval_id:
         rows = [r for r in rows if r.get("approval_id") == approval_id]
-    return judge_approval(rows[-1] if rows else None, config.today().isoformat())
+    return judge_approval(rows[-1] if rows else None, config.today().isoformat(), replay)

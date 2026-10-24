@@ -26,9 +26,16 @@ What changed from Lesson 7:
   evidence for the 42-of-40 seat blocker.
 - When a result holds both a memo and a policy, a `precedence_note` says which is
   newer. Newer or more specific guidance wins (the 7,500 memo over the 5,000 policy).
+- Task #5: a document's header chunk (its title and `Key: value` lines, nothing else)
+  gives up its place when a content section of the same document is a candidate. For
+  "can you find the VPN steps?" (S8 turn 1) the header of vpn_access.md ranked first,
+  and Nova Lite answered from it ("the steps are in the article, last updated
+  2026-06-20") on four runs out of five. The header's facts are already fields on
+  every chunk (`last_updated`, `source`).
 """
 
 import logging
+import re
 from collections.abc import Callable
 
 from agent import config
@@ -203,10 +210,30 @@ def _chunk_result(hit: dict, vector_score: float, rerank_score: float | None) ->
     }
 
 
+_TITLE_LINE = re.compile(r"^#\s")
+_META_LINE = re.compile(r"^[A-Z][A-Za-z ]{1,40}:\s")
+
+
+def header_only(source: dict) -> bool:
+    """True for a chunk that holds only the document's title and `Key: value` lines
+    ('KB article ID: IT-KB-108', 'Last updated: 2026-06-20'). The first line of every
+    stored chunk is its 'Title / Section' breadcrumb (mcp_server/documents.py), not
+    content."""
+    lines = [line.strip() for line in (source.get("text") or "").splitlines() if line.strip()]
+    section = source.get("section")
+    if lines and section and lines[0].endswith(f" / {section}"):
+        lines = lines[1:]
+    return bool(lines) and all(_TITLE_LINE.match(l) or _META_LINE.match(l) for l in lines)
+
+
 def diverse(order: list[int], hits: list[dict], top_k: int,
             per_doc: int = MAX_PER_DOC) -> list[int]:
     """The first top_k of `order`, at most `per_doc` per document; if fewer documents
-    than that matched, the remaining slots go to the next chunks in order."""
+    than that matched, the remaining slots go to the next chunks in order. A header-only
+    chunk is skipped when a content chunk of its document is among the candidates."""
+    with_content = {h["_source"].get("doc_id") for h in hits if not header_only(h["_source"])}
+    order = [i for i in order if not (header_only(hits[i]["_source"])
+                                      and hits[i]["_source"].get("doc_id") in with_content)]
     picked, per = [], {}
     for i in order:
         doc = hits[i]["_source"].get("doc_id")

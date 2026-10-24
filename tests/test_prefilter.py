@@ -121,6 +121,19 @@ def test_rerank_keeps_at_most_two_chunks_per_document():
     assert retrieval.diverse(list(range(4)), only_one, 3) == [0, 1, 2]
 
 
+def test_header_chunk_gives_way_to_a_content_section_of_its_document():
+    header = {"doc_id": "it_kb/vpn_access.md", "section": "VPN Access",
+              "text": "VPN Access / VPN Access\n\n# VPN Access\n\nKB article ID: IT-KB-108\n"
+                      "Last updated: 2026-06-20\nOwner team: IT"}
+    steps = {"doc_id": "it_kb/vpn_access.md", "section": "First-line Troubleshooting",
+             "text": "VPN Access / First-line Troubleshooting\n\nConfirm target actually "
+                     "requires VPN, verify MFA and device trust."}
+    lone = {"doc_id": "it_kb/mfa_reset.md", "text": "# MFA Reset\n\nLast updated: 2026-06-01"}
+    hits = [{"_source": h} for h in (header, lone, steps)]
+    assert retrieval.header_only(header) and not retrieval.header_only(steps)
+    assert retrieval.diverse([0, 1, 2], hits, 5) == [1, 2]  # a lone header stays
+
+
 def test_get_policy_on_a_handbook_page_says_where_it_lives(env):
     from mcp_server.server import _not_a_policy
     assert _not_a_policy("titles-for-support").startswith(

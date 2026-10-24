@@ -29,7 +29,7 @@ from agent.memory import ConversationMemory
 from agent.outcome import STATUSES, TurnOutcome, pending_text, retrieved_sources
 from agent.policy import TurnPlan
 from agent.ports import McpWebexPort, WebexPort
-from agent.records import checklist_tool
+from agent.records import checklist_tool, decision_tool
 from agent.schemas import CallerContext
 from agent.structured import ParseFailed
 
@@ -43,14 +43,17 @@ class RequestIdMismatch(ValueError):
 
 
 def make_models() -> dict:
-    """The chat model, the TurnPlan planner, the ConversationMemory distiller and the
-    forced submit_checklist model. Tests replace this function."""
+    """The chat model, the TurnPlan planner, the ConversationMemory distiller, and the
+    forced submit_checklist and submit_access_decision models. Tests replace this
+    function."""
     return {"model": get_model(),
             "planner": get_model().with_structured_output(TurnPlan, include_raw=True),
             "distiller": get_model().with_structured_output(ConversationMemory,
                                                             include_raw=True),
             "checklist": get_model(max_tokens=2048).with_structured_output(
-                checklist_tool(), include_raw=True)}
+                checklist_tool(), include_raw=True),
+            "decision": get_model(max_tokens=2048).with_structured_output(
+                decision_tool(), include_raw=True)}
 
 
 def make_port(session, configurable: dict) -> WebexPort:
@@ -82,16 +85,24 @@ def _outcome(values: dict, interrupted: list, request_id: str, trace_id: str | N
             "tools_called": values.get("turn_tools", []),
             "sources": retrieved_sources(current_turn(values.get("messages", [])))}
     if interrupted:
+        # The paused run's answer is the AccessDecision decide() rendered just before
+        # the pause; pending_text() covers a pause without one.
         approval = values["approval"]
-        return TurnOutcome(answer=pending_text(approval), status="pending",
-                           approval_id=approval["approval_id"], **base)
+        return TurnOutcome(answer=values.get("answer") or pending_text(approval),
+                           citations=values.get("citations", []), status="pending",
+                           approval_id=approval["approval_id"],
+                           approvals=[a["approval_id"] for a in values.get("approvals") or []],
+                           access_decision=values.get("decision"), **base)
     approval = values.get("approval") or {}
     handoff = values.get("handoff")
     return TurnOutcome(answer=values["answer"], citations=values.get("citations", []),
                        status=values["status"],
                        approval_id=approval.get("approval_id")
                        or (handoff or {}).get("result", {}).get("approval_id"),
-                       checklist=values.get("checklist"), handoff=handoff, **base)
+                       approvals=[a["approval_id"] for a in values.get("approvals") or []],
+                       checklist=values.get("checklist"), handoff=handoff,
+                       access_decision=values.get("decision") if values.get("decided") else None,
+                       **base)
 
 
 async def run_turn(message: str, *, caller_id: str, user_group: str, thread_id: str,
@@ -165,6 +176,9 @@ async def _invoke(graph, thread: dict, message: str, *, configurable: dict, paus
                     "tool_sequence": outcome.tools_called,
                     "sources": outcome.sources,
                     "approval_id": outcome.approval_id,
+                    "approvals": outcome.approvals,
+                    "decision_status": (outcome.access_decision.status
+                                        if outcome.access_decision else None),
                     "handoff_key": (outcome.handoff or {}).get("handoff", {}).get(
                         "idempotency_key")})
     return outcome
