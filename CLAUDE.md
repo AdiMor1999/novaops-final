@@ -26,6 +26,17 @@ packages.
 - Langfuse Python SDK pinned like Lesson 11 (`langfuse>=4.10,<5`), using `get_client`,
   `propagate_attributes` and `langfuse.langchain.CallbackHandler`.
 
+## Python environment
+
+- Use the shared venv at the Daedalus workspace root:
+  `/Users/adimor/.daedalus/workspaces/novaops/.venv` (Python 3.11+). Every worktree runs
+  `python`, `pip` and `pytest` from it, for example
+  `/Users/adimor/.daedalus/workspaces/novaops/.venv/bin/python -m pytest -q`.
+- Never search the disk for another venv, and do not create one per worktree.
+- Whenever `requirements.txt` changes, run
+  `/Users/adimor/.daedalus/workspaces/novaops/.venv/bin/pip install -r requirements.txt`
+  from the worktree that changed it.
+
 ## Layout
 
 | Path | Contents |
