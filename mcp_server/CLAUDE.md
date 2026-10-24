@@ -18,6 +18,17 @@ and this is where authorization, approvals and idempotency are enforced. Startin
   different answers.
 - `caller_id`, `user_group` and `request_id` arrive from the agent's tool wrapper. They are
   not in the schema the model sees, and the tool trusts only these injected values for identity.
+- The mechanism is the MCP request `_meta` field, key `novaops`
+  (`{"caller_id", "user_group", "request_id"}`, plus the Langfuse `trace_id` and
+  `parent_observation_id`). `agent/mcp_tools.py` sets it on every `call_tool`;
+  `mcp_server/context.py` reads it through FastMCP's `Context`. A call without it is
+  refused. `_meta` is protocol, not a tool argument, so no input schema can carry it.
+  `tests/test_boundary.py` checks that no schema names any of the three.
+- Business record ids never use the name `request_id`, so it can only mean the
+  workflow request: `access_request_id` (AR001) and `record_id` (whatever an approval is
+  for). Every tool goes through `_serve()` in `server.py`.
+- The server imports `call_model` and `embed_text` from `agent/model.py` for reranking
+  and embeddings, so the one-Bedrock-function rule holds here too.
 
 ## Writes
 
@@ -42,7 +53,9 @@ A replayed approval is consumed once. `create_access_request` records a request 
 ### `request_approval`
 
 Creates the approval row that a gated write later needs, so it cannot require an approval
-itself. It is idempotent instead: the key is (request type, request id). If an open row exists
+itself. It also writes the row's scope to `approval_controls` (employee, system, caller,
+workflow `request_id`, expiry), which is what the gated write matches against. A seed
+approval such as `AP001` gets its scope the first time a workflow requests it. It is idempotent instead: the key is (request type, request id). If an open row exists
 for that key, it returns that row with `reused: true` and writes nothing. It only ever creates
 rows with status `pending`. It cannot approve, and nothing it writes opens a gated write.
 
