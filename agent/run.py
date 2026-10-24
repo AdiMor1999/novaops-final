@@ -93,7 +93,6 @@ async def run_turn(message: str, *, caller_id: str, user_group: str, thread_id: 
                     thread, message, caller_id=caller_id, user_group=user_group,
                     thread_id=thread_id, request_id=request_id, paused=paused,
                     paused_trace=paused_trace)
-        outcome.trace_url = langfuse.get_trace_url(trace_id=outcome.trace_id)
     finally:
         langfuse.flush()
     assert outcome.status in STATUSES
@@ -131,6 +130,9 @@ async def _invoke(graph, thread: dict, message: str, *, caller_id: str, user_gro
                 values = (await graph.aget_state(thread)).values
                 outcome = _outcome(values, result.get("__interrupt__") or [],
                                    request_id, trace_id)
+            # Set before root.update, so the trace's own output carries the link too.
+            # None when Langfuse is not configured (the client is then a no-op).
+            outcome.trace_url = langfuse.get_trace_url(trace_id=trace_id)
             # Trace metadata is only settable by propagation; the root span is
             # still current here, so this puts `status` on the trace as well.
             with propagate_attributes(metadata={"request_id": request_id,
