@@ -12,7 +12,18 @@ project writes its own tests, so the hook protects a narrower set:
     novaops-course/**, lesson-code/**   read-only reference material
 
 and blocks reading EVALUATION-INPUTS.yaml through Read, Grep or Bash. Development runs on the
-golden dataset only; the evaluation inputs run once, in task #11.
+golden dataset only; the evaluation inputs run once, in task #11. It also refuses the shell
+commands the deny list refuses (force push, hard reset, rm -rf).
+
+WHERE IT RUNS
+-------------
+Claude Code reads `.claude/settings.json` only from the folder a session starts in. Daedalus
+starts each session in its own folder above the repo checkout, so this repo's settings never
+load there. For those sessions the hook is wired from the user's `~/.claude/settings.json`
+(the block is in `.claude/user-settings.snippet.json`) with `--workspace <dir>`: it then acts
+only when the session's cwd is inside that workspace. Paths are matched against the
+novaops-final checkout that contains them, found by this file's own path, so
+`<anything>/novaops-final/evals/targets.py` is protected whatever the session's folder is.
 
 LIMITS
 ------
@@ -44,22 +55,61 @@ WRITE_VERBS = re.compile(
 )
 # Path-shaped tokens. Generous on purpose: protected_reason() does the deciding.
 PATH_TOKEN = re.compile(r"[\w./~-]+")
+# Commands settings.json denies. Repeated here for sessions where only this hook is wired.
+DANGEROUS_BASH = re.compile(
+    r"\bgit\s+push\s+(--force|-f)\b|\bgit\s+reset\s+--hard\b|\brm\s+-rf\b"
+)
+# A novaops-final checkout is a directory that holds this hook.
+CHECKOUT_MARKER = Path(".claude", "hooks", "guard_protected_paths.py")
 
 
 def project_root(event: dict) -> Path:
-    return Path(os.environ.get("CLAUDE_PROJECT_DIR") or event.get("cwd") or ".").resolve()
+    """Where relative paths resolve: the tool call's cwd, else the project folder."""
+
+    return Path(event.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or ".").resolve()
+
+
+def checkout_of(path: Path) -> Path | None:
+    """The novaops-final checkout that contains this path, if any."""
+
+    for parent in (path, *path.parents):
+        if (parent / CHECKOUT_MARKER).is_file():
+            return parent
+    return None
 
 
 def relative_parts(path: str, root: Path) -> tuple[str, ...]:
-    """Path parts relative to the project root when the path is inside it, else absolute parts."""
+    """Path parts relative to the checkout that contains the path, else to the project root,
+    else absolute parts."""
 
-    candidate = Path(path)
+    candidate = Path(path).expanduser()
     if not candidate.is_absolute():
         candidate = root / candidate
+    candidate = candidate.resolve()
+    for base in (checkout_of(candidate), root):
+        if base is None:
+            continue
+        try:
+            return candidate.relative_to(base).parts
+        except ValueError:
+            pass
+    return PurePath(os.path.normpath(candidate)).parts
+
+
+def inside(path: Path, workspace: Path) -> bool:
     try:
-        return candidate.resolve().relative_to(root).parts
+        path.relative_to(workspace)
+        return True
     except ValueError:
-        return PurePath(os.path.normpath(candidate)).parts
+        return False
+
+
+def workspace_arg(argv: list[str]) -> Path | None:
+    """`--workspace <dir>` from the command line, set when wired from user settings."""
+
+    if "--workspace" in argv[:-1]:
+        return Path(argv[argv.index("--workspace") + 1]).expanduser().resolve()
+    return None
 
 
 def protected_reason(path: str, root: Path) -> str:
@@ -81,12 +131,14 @@ def protected_reason(path: str, root: Path) -> str:
     return ""
 
 
-def reads_eval_inputs(path: str) -> bool:
+def reads_eval_inputs(path: str, root: Path) -> bool:
     """True for the evaluation inputs file, or a directory a recursive search would read it from."""
 
     if not path:
         return False
-    target = Path(path)
+    target = Path(path).expanduser()
+    if not target.is_absolute():
+        target = root / target
     return target.name == EVAL_INPUTS or (target.is_dir() and (target / EVAL_INPUTS).exists())
 
 
@@ -109,6 +161,8 @@ EVAL_INPUTS_REASON = (
 def check_bash(command: str, root: Path) -> str:
     if EVAL_INPUTS in command:
         return EVAL_INPUTS_REASON
+    if DANGEROUS_BASH.search(command):
+        return "Force push, hard reset and rm -rf are denied in this project. Ask the user."
     if not WRITE_VERBS.search(command):
         return ""
     for token in PATH_TOKEN.findall(command):
@@ -130,6 +184,10 @@ def main() -> int:
     tool_input = event.get("tool_input") or {}
     root = project_root(event)
 
+    workspace = workspace_arg(sys.argv)
+    if workspace is not None and not inside(root, workspace):
+        return 0
+
     if tool == "Bash":
         reason = check_bash(str(tool_input.get("command", "")), root)
         return deny(reason) if reason else 0
@@ -137,7 +195,7 @@ def main() -> int:
     # Glob is not checked: it lists file names and never reads contents.
     if tool in ("Read", "Grep"):
         path = tool_input.get("file_path") or tool_input.get("path") or event.get("cwd") or ""
-        return deny(EVAL_INPUTS_REASON) if reads_eval_inputs(path) else 0
+        return deny(EVAL_INPUTS_REASON) if reads_eval_inputs(path, root) else 0
 
     if tool in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
         path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""

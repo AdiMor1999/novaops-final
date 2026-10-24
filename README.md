@@ -13,7 +13,7 @@ the file. A claim without a file is not made.
 | Claim | File | Status |
 | --- | --- | --- |
 | Project conventions and hard rules | `CLAUDE.md`, `mcp_server/CLAUDE.md`, `agent/CLAUDE.md`, `evals/CLAUDE.md` | done (task #1) |
-| Agent edits to eval targets, fixtures and the held-out inputs are refused | `.claude/settings.json`, `.claude/hooks/guard_protected_paths.py` | done (task #1) |
+| Agent edits to eval targets, fixtures and the held-out inputs are refused, in Daedalus sessions too | `.claude/settings.json`, `.claude/hooks/guard_protected_paths.py`, `.claude/user-settings.snippet.json`, `tests/test_guard_hook.py` | done (task #1, fixed before task #5) |
 | One function calls Bedrock, with bounded retries that fail closed | `agent/model.py`, `tests/test_retry.py` | done (task #2) |
 | Documents ingested with `audience`, `corpus`, `source`, `last_updated`, `doc_type`, `section` | `scripts/ingest.py`, `mcp_server/documents.py`, `tests/test_ingest_metadata.py` | done (task #2) |
 | Database is a file and reseeds before each case | `scripts/reseed.py`, `mcp_server/db.py` | done (task #2) |
@@ -83,7 +83,7 @@ the lesson folders. Rows are added as each module is copied.
 
 | Our file | Copied from (`lesson-code/`) | What changed |
 | --- | --- | --- |
-| `.claude/hooks/guard_protected_paths.py` | `lesson-12-eval-loop-engineering/code/02-coding-loop/.claude/hooks/block_test_edits.py` | Protects `evals/targets.py`, `tests/fixtures/`, `.claude/`, the dataset files and the reference repos instead of every test file. Also blocks reads of `EVALUATION-INPUTS.yaml`. |
+| `.claude/hooks/guard_protected_paths.py` | `lesson-12-eval-loop-engineering/code/02-coding-loop/.claude/hooks/block_test_edits.py` | Protects `evals/targets.py`, `tests/fixtures/`, `.claude/`, the dataset files and the reference repos instead of every test file. Also blocks reads of `EVALUATION-INPUTS.yaml` and the denied shell commands. Finds the checkout from the target path, so it works from a Daedalus session folder; `--workspace` limits it to this workspace when wired from user settings. |
 | `.claude/settings.json` | `lesson-12-eval-loop-engineering/code/03-eval-loop/.claude/settings.json` | Allow list for headless project work, deny rules for `.env`, the held-out inputs and protected paths. No activity log. |
 | `CLAUDE.md` and nested `CLAUDE.md` files | `lesson-12-eval-loop-engineering/code/02-coding-loop/CLAUDE.md`, `03-eval-loop/CLAUDE.md`, `lesson-code/*-sdd/CLAUDE.md-example.html` | Rewritten for this project's stack, layout and hard rules. |
 | `agent/model.py` | `lesson-12-eval-loop-engineering/samples/02-coding-loop/agent-hardened/agent.py` (`get_model`, `should_retry`, `call_with_retry`); `lesson-07-rag-advanced/code/01-opensearch-setup/client.py` (`embed_text`) | Adds `call_model()` over Converse with a Langfuse generation per call. boto retries off, one tenacity layer over `should_retry`, `maxTokens` always set. `embed_text` moved here so the server has no Bedrock client of its own. |

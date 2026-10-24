@@ -130,7 +130,15 @@ evidence. Say which check you ran and paste its result in the journal entry or P
 
 - edits to `evals/targets.py`, `tests/fixtures/**`, `.claude/**` and the dataset files;
 - edits to anything under `novaops-course/` or `lesson-code/`;
-- any read of `EVALUATION-INPUTS.yaml`, including through Bash or Grep.
+- any read of `EVALUATION-INPUTS.yaml`, including through Bash or Grep;
+- force push, `git reset --hard` and `rm -rf`.
+
+Claude Code reads `.claude/settings.json` only from the folder a session starts in, and
+Daedalus starts sessions in a folder above the checkout, so there this file never loads. For
+Daedalus sessions the same deny rules and the hook come from `~/.claude/settings.json`; the
+block to merge is `.claude/user-settings.snippet.json`. Its hook runs with
+`--workspace <dir>` and does nothing outside that workspace. `tests/test_guard_hook.py` runs
+the hook on sample events from a Daedalus-shaped session folder.
 
 If the hook blocks you, do not work around it. Stop and say which file you need and why. The
 hook is pattern matching and can be bypassed; the deny rules and diff review are the layers

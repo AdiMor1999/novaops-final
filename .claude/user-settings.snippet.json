@@ -1,0 +1,31 @@
+{
+  "_comment": "Merge into ~/.claude/settings.json. Daedalus starts sessions in a folder above the repo checkout, where this repo's .claude/settings.json never loads. WS is /Users/adimor/.daedalus/workspaces/novaops; change it if the workspace moves.",
+  "permissions": {
+    "deny": [
+      "Read(//Users/adimor/.daedalus/workspaces/novaops/**/.env)",
+      "Read(//Users/adimor/.daedalus/workspaces/novaops/**/EVALUATION-INPUTS.yaml)",
+      "Edit(//Users/adimor/.daedalus/workspaces/novaops/**/EVALUATION-INPUTS.yaml)",
+      "Edit(//Users/adimor/.daedalus/workspaces/novaops/**/GOLDEN-DATASETS.json)",
+      "Edit(//Users/adimor/.daedalus/workspaces/novaops/**/novaops-course/**)",
+      "Edit(//Users/adimor/.daedalus/workspaces/novaops/lesson-code/**)",
+      "Edit(//Users/adimor/.daedalus/workspaces/novaops/**/novaops-final/evals/targets.py)",
+      "Edit(//Users/adimor/.daedalus/workspaces/novaops/**/novaops-final/tests/fixtures/**)",
+      "Edit(//Users/adimor/.daedalus/workspaces/novaops/**/novaops-final/.claude/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash|Read|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/adimor/.daedalus/workspaces/novaops/repos/novaops-final/.claude/hooks/guard_protected_paths.py --workspace /Users/adimor/.daedalus/workspaces/novaops",
+            "timeout": 10,
+            "statusMessage": "checking protected paths"
+          }
+        ]
+      }
+    ]
+  }
+}
