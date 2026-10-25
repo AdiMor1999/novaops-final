@@ -215,8 +215,8 @@ def get_employee(query: str, ctx: Context) -> dict:
 
     Returns every match, each with a `citation` label such as [db:employees#E001] to
     cite for facts from that row. Several employees share a first name, so check the
-    id before acting on a name. A misspelt name ('rrachel stein') returns the closest
-    names with `match: similar`. `systems_allowed_by_role` is what the role entitles someone to,
+    id before acting on a name. A misspelt full name ('rrachel stein') returns the
+    employee it is a typo of, with `match: similar`; a different name returns nothing. `systems_allowed_by_role` is what the role entitles someone to,
     not what they have been given.
 
     Args:

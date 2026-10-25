@@ -16,6 +16,7 @@ import sqlite3
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
+from itertools import permutations
 from pathlib import Path
 
 from agent import config
@@ -131,22 +132,37 @@ def _name_words(text: str) -> list[str]:
     return [w for w in re.findall(r"[a-z]+", text.lower()) if len(w) >= 3]
 
 
+def _one_letter_apart(a: str, b: str) -> bool:
+    """Equal, or one inserted or deleted letter ('rrachel'/'rachel', 'steins'/'stein'),
+    with at least 4 letters left. A changed letter never matches: 'stern' is not 'stein'
+    and 'tim' is not 'tom', because that is another name, not a typo."""
+    if a == b:
+        return True
+    short, long_ = sorted((a, b), key=len)
+    return (len(long_) == len(short) + 1 and len(short) >= 4
+            and any(long_[:i] + long_[i + 1:] == short for i in range(len(long_))))
+
+
+def _typo_of(words: list[str], name: list[str]) -> bool:
+    """Every word of the full name pairs with its own query word, and no word is left over."""
+    return len(words) == len(name) and any(
+        all(_one_letter_apart(w, n) for w, n in zip(order, name))
+        for order in permutations(words))
+
+
 def similar_employees(conn, query: str) -> list[dict]:
     """The fallback when no name contains the whole query. Users type 'rrachel stein'
     (S8) and 'rrachel steins' (S7); a substring match finds nobody, and the model then
-    reports that Rachel does not exist. A name word counts when it sits inside a query
-    word or the other way round; only the employees with the most such words return,
-    so 'rrachel steins' gives Rachel Stein and not Rachel Green."""
+    reports that Rachel does not exist. Only a typo of the whole full name matches
+    (`_typo_of`): a shared first name is not enough, so 'rachel stern' and 'rachel
+    brown' find nobody instead of Rachel Stein or Rachel Green. The code lookup
+    (agent/handoff.py) accepts exactly one row; several end needs_human."""
     words = _name_words(query)
     if not words:
         return []
-    scored = []
-    for row in rows(conn.execute(f"SELECT {EMPLOYEE_FIELDS} FROM employees ORDER BY full_name")):
-        score = sum(any(t in w or w in t for w in words) for t in _name_words(row["full_name"]))
-        if score:
-            scored.append((score, row))
-    best = max((score for score, _ in scored), default=0)
-    return [_decode_systems(row) for score, row in scored if score == best]
+    return [_decode_systems(row) for row in
+            rows(conn.execute(f"SELECT {EMPLOYEE_FIELDS} FROM employees ORDER BY full_name"))
+            if _typo_of(words, _name_words(row["full_name"]))]
 
 
 def check_software_subscription(conn, software: str, today: date) -> list[dict]:
