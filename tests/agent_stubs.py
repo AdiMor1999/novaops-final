@@ -1,11 +1,13 @@
 """Stand-ins for the two models, so graph tests run without Bedrock.
 
 The MCP server is the real one over the in-memory transport, on a reseeded file DB.
-`use_stubs()` swaps `agent.run.make_models` and `agent.run.mcp_session`; everything
-else, including run_turn(), the AsyncSqliteSaver and the tool wrapper, is the real code.
+`use_stubs()` swaps `agent.run.make_models`, `agent.run.mcp_session` and the server's
+`retrieval.search`; everything else, including run_turn(), the AsyncSqliteSaver and the
+tool wrapper, is the real code.
 """
 
 import itertools
+import re
 from contextlib import asynccontextmanager
 
 from langchain_core.messages import AIMessage
@@ -78,6 +80,33 @@ class _Bound:
         return self.model._next(messages, self.names)
 
 
+class AutoDecision:
+    """Stands in for the forced submit_access_decision model. It cites the first row
+    label in what it is shown, so the draft passes the known-label check, and records
+    every prompt it got."""
+
+    LABEL = re.compile(r"\[db:[a-z_]+#[A-Za-z0-9_-]+\]")
+
+    def __init__(self, statement: str = "The records were read.",
+                 next_step: str = "The approver decides on the approval."):
+        self.statement, self.next_step = statement, next_step
+        self.seen: list[list] = []
+
+    async def ainvoke(self, messages):
+        self.seen.append(messages)
+        labels = self.LABEL.findall(str(messages[-1].content))
+        fact = {"statement": self.statement, "citations": [{"label": l} for l in labels[:1]]}
+        parsed = {"observed_facts": [fact], "recommended_next_steps": [self.next_step]}
+        return {"raw": AIMessage(content="stub"), "parsed": parsed, "parsing_error": None}
+
+
+def no_documents(query, corpora, caller_id, **_kwargs) -> dict:
+    """Stands in for retrieval.search in graph tests: the graph is under test, not
+    OpenSearch or Bedrock (tests/test_prefilter.py and the live tests cover those)."""
+    return {"query": query, "corpora": list(corpora), "count": 0, "chunks": [],
+            "note": "No document matched this query in the searched collections."}
+
+
 @asynccontextmanager
 async def memory_session():
     from mcp_server.server import mcp
@@ -85,13 +114,17 @@ async def memory_session():
         yield client
 
 
-def use_stubs(monkeypatch, planner, model, *, distiller=None, checklist=None, port=None):
+def use_stubs(monkeypatch, planner, model, *, distiller=None, checklist=None, decision=None,
+              port=None):
     """`distiller` and `checklist` default to None, which leaves those nodes out of
-    the graph. `port` replaces the McpWebexPort; without it the real port runs against
-    the in-memory server."""
+    the graph. `decision` defaults to an `AutoDecision`. `port` replaces the
+    McpWebexPort; without it the real port runs against the in-memory server."""
     import agent.run
+    decision = decision or AutoDecision()
     monkeypatch.setattr(agent.run, "make_models", lambda: {
-        "model": model, "planner": planner, "distiller": distiller, "checklist": checklist})
+        "model": model, "planner": planner, "distiller": distiller, "checklist": checklist,
+        "decision": decision})
     monkeypatch.setattr(agent.run, "mcp_session", memory_session)
+    monkeypatch.setattr("mcp_server.retrieval.search", no_documents)
     if port is not None:
         monkeypatch.setattr(agent.run, "make_port", lambda _session, _config: port)

@@ -167,6 +167,22 @@ def _remember_key(conn, key: str, entity_type: str, entity_id: str, ctx: CallerC
     )
 
 
+def _record_reuse(conn, key: str, entity_type: str, entity_id: str, approval_id: str,
+                  ctx: CallerContext) -> None:
+    """A released write that returns an existing row (AR001) still uses its approval.
+    The first time this key is seen it is stored, the approval is consumed by it, and
+    the reuse is audited. A replay with the same key finds the key already stored and
+    writes nothing; the approval stays consumed by that key, so the replay is allowed
+    and any other action is refused."""
+    if conn.execute("SELECT 1 FROM idempotency_keys WHERE idempotency_key = ?",
+                    (key,)).fetchone():
+        return
+    _remember_key(conn, key, entity_type, entity_id, ctx)
+    _consume(conn, approval_id, key)
+    _audit(conn, entity_type, entity_id, f"{entity_type}_reused", ctx.caller_id,
+           f"Returned the existing {entity_id} under {approval_id}, request {ctx.request_id}.")
+
+
 def create_access_request(conn, ctx: CallerContext, employee_id: str, software: str,
                           business_justification: str,
                           access_level: str = "standard_user") -> dict:
@@ -189,6 +205,7 @@ def create_access_request(conn, ctx: CallerContext, employee_id: str, software: 
             (employee_id, system["system_id"], *OPEN_ACCESS_REQUEST),
         )
         if existing:
+            _record_reuse(c, key, "access_request", existing, approval_id, ctx)
             row = db.get_access_requests(c, request_id=existing)[0]
             return {**row, "reused": True, "approval_id": approval_id}
 
@@ -235,6 +252,7 @@ def create_ticket(conn, ctx: CallerContext, employee_id: str, subject: str,
         else:
             existing = _reuse(c, key, "SELECT NULL WHERE 0", ())
         if existing:
+            _record_reuse(c, key, "ticket", existing, approval_id, ctx)
             row = dict(c.execute("SELECT * FROM tickets WHERE ticket_id = ?", (existing,)).fetchone())
             return {**row, "reused": True, "approval_id": approval_id}
 
@@ -300,13 +318,19 @@ def request_approval(conn, ctx: CallerContext, request_type: str, request_id: st
         db.require_employee(c, approver_id)
         subject, system_id = _approval_scope(c, request_type, request_id, employee_id, software)
         expires = (config.today() + timedelta(days=APPROVAL_TTL_DAYS)).isoformat()
+        # A row this workflow request already holds comes first, whatever its status:
+        # replaying the request after its write was released must find the consumed
+        # AP001 again, not open a new approval for an action that already happened.
         existing = c.execute(
             "SELECT a.approval_id FROM approvals a "
             "LEFT JOIN approval_controls ctl ON a.approval_id = ctl.approval_id "
             "WHERE a.request_type = ? AND a.request_id = ? AND (a.status IN (?, ?) "
-            "   OR (a.status = 'approved' AND ctl.consumed_at IS NULL)) "
-            "ORDER BY a.created_at LIMIT 1",
-            (request_type, request_id, *OPEN_APPROVAL),
+            "   OR (a.status = 'approved' AND ctl.consumed_at IS NULL) "
+            "   OR (ctl.workflow_request_id = ? AND ctl.requested_by = ?)) "
+            "ORDER BY (ctl.workflow_request_id IS NOT ? OR ctl.requested_by IS NOT ?), "
+            "         a.created_at LIMIT 1",
+            (request_type, request_id, *OPEN_APPROVAL, ctx.request_id, ctx.caller_id,
+             ctx.request_id, ctx.caller_id),
         ).fetchone()
         if existing:
             approval_id, reused = existing["approval_id"], True
@@ -328,7 +352,11 @@ def request_approval(conn, ctx: CallerContext, request_type: str, request_id: st
             (approval_id, subject, system_id, ctx.caller_id, ctx.request_id, expires),
         )
         row = db.get_approvals(c, request_id=request_id)
-        return {**next(r for r in row if r["approval_id"] == approval_id), "reused": reused}
+        bound = c.execute(
+            "SELECT workflow_request_id = ? AND requested_by = ? FROM approval_controls "
+            "WHERE approval_id = ?", (ctx.request_id, ctx.caller_id, approval_id)).fetchone()
+        return {**next(r for r in row if r["approval_id"] == approval_id), "reused": reused,
+                "this_request": bool(bound[0])}
 
     return _transaction(conn, work)
 

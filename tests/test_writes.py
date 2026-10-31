@@ -76,13 +76,54 @@ def test_expired_approval_refused(conn, monkeypatch):
         writes.create_access_request(conn, CTX, "E016", "Figma", "Design reviews")
 
 
-def test_existing_open_request_is_reused(conn):
-    """AR001 (E010, Webex, blocked) is the open request; a write for it returns AR001."""
+def consumed_key(conn, approval_id):
+    return conn.execute("SELECT consumed_key FROM approval_controls WHERE approval_id = ?",
+                        (approval_id,)).fetchone()[0]
+
+
+def test_existing_open_request_is_reused_and_still_consumes_the_approval(conn):
+    """AR001 (E010, Webex, blocked) is the open request; a write for it returns AR001.
+    Returning it is the release, so AP001 is used up by it (task #5)."""
     pending = writes.request_approval(conn, CTX, "access_request", "AR001", "E006")
     assert pending["approval_id"] == "AP001" and pending["reused"] is True
     writes.record_approval_decision("AP001", "approved", "E006", conn=conn)
+    before = count(conn, "access_requests")
     result = writes.create_access_request(conn, CTX, "E010", "Webex", "Customer calls")
     assert result["request_id"] == "AR001" and result["reused"] is True
+    assert consumed_key(conn, "AP001") == "create_access_request:E010:S001:REQ-T1"
+    replay = writes.create_access_request(conn, CTX, "E010", "Webex", "Customer calls")
+    assert replay["request_id"] == "AR001" and replay["reused"] is True
+    assert count(conn, "access_requests") == before
+    assert conn.execute("SELECT COUNT(*) FROM audit_log WHERE event_type = "
+                        "'access_request_reused'").fetchone()[0] == 1
+
+
+def test_a_consumed_approval_does_not_release_another_request(conn):
+    """The action key is (employee, system, workflow request), so a new action is a new
+    request. AP001, consumed by REQ-T1, opens nothing for REQ-T2, even after REQ-T2
+    asks for it: request_approval gives REQ-T2 its own pending row."""
+    writes.request_approval(conn, CTX, "access_request", "AR001", "E006")
+    writes.record_approval_decision("AP001", "approved", "E006", conn=conn)
+    writes.create_access_request(conn, CTX, "E010", "Webex", "Customer calls")
+    other = caller("E007", "UG_IT", "REQ-T2")
+    writes.request_approval(conn, other, "access_request", "AR001", "E006")
+    with pytest.raises(WriteRefused):
+        writes.create_access_request(conn, other, "E010", "Webex", "Customer calls")
+
+
+def test_request_approval_after_release_returns_the_same_consumed_row(conn):
+    """Replaying the workflow request after its write finds AP001 again (this_request),
+    instead of opening a second approval for an action that already happened."""
+    writes.request_approval(conn, CTX, "access_request", "AR001", "E006")
+    writes.record_approval_decision("AP001", "approved", "E006", conn=conn)
+    writes.create_access_request(conn, CTX, "E010", "Webex", "Customer calls")
+    before = count(conn, "approvals")
+    again = writes.request_approval(conn, CTX, "access_request", "AR001", "E006")
+    assert (again["approval_id"], again["consumed"], again["this_request"]) == ("AP001", 1, True)
+    other = writes.request_approval(conn, caller("E007", "UG_IT", "REQ-T2"), "access_request",
+                                    "AR001", "E006")
+    assert other["approval_id"] != "AP001" and other["this_request"] is True
+    assert count(conn, "approvals") == before + 1
 
 
 def test_request_approval_twice_makes_one_pending_row(conn):

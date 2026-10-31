@@ -24,8 +24,13 @@ One LangGraph graph serves both scopes. Starting code:
   action, caller and request. `action_confirmed` from the planner affects visibility only and
   never opens the gate.
 - `request_approval` is in neither `LOADOUTS` nor `WRITE_TOOLS`, because it needs no prior
-  approval. The graph's approval node calls it from code when a Webex action intent has
-  `action_confirmed`, then interrupts. The model never calls it directly.
+  approval. The graph's approval node calls it from code when an `access_request` turn has
+  `action_confirmed`, once per approval type of the open request (AP001 and AP002 for
+  AR001), then interrupts. Only the `access_request` approval gates the write. The model
+  never calls it directly.
+- When the gate opens, the next model call is forced to the released write. Code's own
+  tool calls go into the thread as call and result pairs and do not count against the
+  model's per-turn cap.
 - Maya's intents have no route to `release_write()` or to the approval node.
 - The gate in the graph is a convenience, not authorization. The MCP server checks the
   approval again.
@@ -47,10 +52,15 @@ One LangGraph graph serves both scopes. Starting code:
   `[source#section]` for a chunk, `[db:<table>#<id>]` for a row, `[db:<table>]` for a
   whole result. `uncited_sentences()` in `outcome.py` is the check; one repair call, then
   `needs_human`.
-- A confirmed `access_request` is routed on the subject's `get_employee` row already in
-  the thread (`handoff.py`): `preboarding` → the Maya handoff through `WebexPort`, any
-  other verified subject → the approval node, no match → `needs_human`. The port is
-  injected by `run_turn()` (`make_port`); tests use `FakeWebexPort`.
+- A confirmed `access_request` is routed on the subject's `get_employee` row
+  (`handoff.py`): `preboarding` → the Maya handoff through `WebexPort`, any other
+  verified subject → the approval node. When the thread has no row for the subject,
+  `lookup_subject` calls `get_employee` from code first; no match or several → `needs_human`.
+  The port is injected by `run_turn()` (`make_port`); tests use `FakeWebexPort`.
+- Webex returns an `AccessDecision` (`decide` node, `webex.py`): the model drafts the
+  observed facts and next steps through a forced `submit_access_decision` call; code sets
+  status, blocking reason, reused records and actions taken, and writes the answer. It
+  runs before the pause and again after the released write.
 
 ## Entry point
 

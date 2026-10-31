@@ -20,12 +20,18 @@ its `graph.py`. Changes:
   gained a tool the S2/S9 matrix showed missing (evals/tool_matrix.py):
   `subscription_review` gets `search_hr_documents` (S2 turn 9, the freeze memo) and
   `equipment_request` gets `list_onboarding_tasks` (S9 turn 5, OT003).
+- Task #5: `TurnPlan.subject_name`, so code can look up a subject the thread has not
+  seen yet (agent/handoff.py). `action_confirmed` also covers an employee asking for
+  access for themselves (the Rachel scenario of spec §9), and only `access_request`
+  reaches the approval node. `subscription_review` gets `list_onboarding_tasks`: a
+  manager's seat question is answered from the team's blocked provisioning tasks,
+  because seat holders are not recorded (spec §13).
 """
 
 import re
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 Intent = Literal[
     "policy_question",
@@ -83,7 +89,7 @@ LOADOUTS: dict[str, list[str] | None] = {
     ],
     "subscription_review": [
         "check_software_subscription", "get_team", "get_access_requests", "get_approvals",
-        "search_knowledge_base", "search_hr_documents", "get_policy",
+        "list_onboarding_tasks", "search_knowledge_base", "search_hr_documents", "get_policy",
     ],
     "access_request": [
         "get_employee", "check_software_subscription", "get_access_requests",
@@ -143,8 +149,10 @@ class TurnPlan(BaseModel):
         default=False,
         description=(
             "True only if THIS message authorises creating or filing a record in a "
-            "system ('go ahead', 'file it'). Writing, drafting, summarising or 'write it "
-            "up' is composing text, NOT authorisation to file anything."
+            "system ('go ahead', 'file it'), or is an employee asking to be given access "
+            "to a system for themselves ('I need Webex access'). Writing, drafting, "
+            "summarising or 'write it up' is composing text, NOT authorisation to file "
+            "anything. A message that says not to file is never confirmed."
         ),
     )
     subject_employee_id: str | None = Field(
@@ -155,10 +163,27 @@ class TurnPlan(BaseModel):
             "Null if no record in the conversation identifies them."
         ),
     )
+    subject_name: str | None = Field(
+        default=None,
+        description=(
+            "Full name of the person the newest message is about, as the message writes "
+            "it ('Rachel Stein'), when no record in the conversation gives their id. "
+            "Null when the message is about the caller."
+        ),
+    )
     system: str | None = Field(
         default=None,
         description="The software system the newest message is about (e.g. Webex), or null.",
     )
+
+    @field_validator("subject_employee_id", "subject_name", "system", mode="before")
+    @classmethod
+    def _null_words_are_null(cls, value):
+        """Nova Lite writes the string "null" (S8 turn 4) where it means no value; code
+        would otherwise look up an employee called 'null'."""
+        if isinstance(value, str) and value.strip().lower() in ("", "null", "none", "n/a"):
+            return None
+        return value
 
 
 PLANNER_PROMPT = (
@@ -184,10 +209,12 @@ PLANNER_PROMPT = (
     "- A DIFFERENT TOPIC needs a different document. Having retrieved the VPN article "
     "does not answer a password question. Only an answer you could quote from THIS "
     "conversation makes needs_tools False.\n"
-    "- action_confirmed only when this message says to go ahead; then needs_tools is True.\n"
+    "- action_confirmed only when this message says to go ahead, or an employee asks to "
+    "be given access to a system for themselves; then needs_tools is True.\n"
     "- subject_employee_id is the id of the person the request is about (E001), copied "
     "from an employee record in the conversation, or the caller's own id when they ask "
-    "about themselves; system names the software.\n"
+    "about themselves; subject_name is their full name when no record gives the id; "
+    "system names the software.\n"
     "- You may be given distilled session memory plus the raw conversation since it was "
     "written. The memory's topic is the session's history, not this turn.\n"
     "- Checklists, seat counts, tickets and inventory in memory are a SNAPSHOT; if the "
@@ -199,7 +226,28 @@ PLANNER_PROMPT = (
 CURRENT_STATE = re.compile(r"\b(right now|currently|still|after that|now)\b", re.IGNORECASE)
 
 
-def checked_plan(plan: TurnPlan, has_history: bool, message: str = "") -> TurnPlan:
+# An employee asking for access for themselves (spec §9: "I joined Customer Success and
+# need Webex access. Webex says my account is not licensed."), and wording that says not
+# to file, which always wins (S6/S7/S8 turn 3: "draft ... do not file it").
+SELF_ACCESS = re.compile(
+    r"\b(i|i'm|i am)\b[^.?!\n]{0,40}\b(need|want|require|request|get|can't|cannot)\b"
+    r"[^.?!\n]{0,40}\baccess\b|\bmy account is not licen[cs]ed\b", re.IGNORECASE)
+NO_FILING = re.compile(
+    r"\b(do not|don't|dont|not)\b[^.?!\n]{0,20}\b(file|submit|create|send|open)\b|"
+    r"\bdraft\b|\btext only\b", re.IGNORECASE)
+
+
+def self_access_request(plan: TurnPlan, request: str, caller_id: str | None) -> bool:
+    """An access request the caller makes for themselves: first person, no other person
+    named by the planner, no wording against filing."""
+    if plan.intent != "access_request" or not caller_id:
+        return False
+    other = (plan.subject_employee_id not in (None, caller_id)) or bool(plan.subject_name)
+    return not other and bool(SELF_ACCESS.search(request)) and not NO_FILING.search(request)
+
+
+def checked_plan(plan: TurnPlan, has_history: bool, message: str = "",
+                 caller_id: str | None = None) -> TurnPlan:
     """Code corrects two planner claims it can disprove. `needs_tools=False` means every
     fact is already in the conversation, which is false:
 
@@ -208,10 +256,18 @@ def checked_plan(plan: TurnPlan, has_history: bool, message: str = "") -> TurnPl
     - when the message asks for the current state ("what's on her checklist right
       now?", S2 turn 3). An earlier tool result is a snapshot, not the state now.
       Only the first paragraph is read: it is the user's own request, and a pasted
-      thread after it ("baseline groups are still pending", S9 turn 2) is not."""
+      thread after it ("baseline groups are still pending", S9 turn 2) is not.
+
+    Task #5 adds a third: `action_confirmed=False` on an employee's own access request
+    (`self_access_request`). Nova Lite left it False on the Rachel scenario although the
+    field's description names that case. Setting it routes the turn to the approval
+    request, which only reuses or creates a pending row; it opens no write."""
+    request = message.strip().split("\n\n")[0]
+    if not plan.action_confirmed and self_access_request(plan, request, caller_id):
+        plan = plan.model_copy(update={"action_confirmed": True, "needs_tools": True,
+                                       "subject_employee_id": caller_id})
     if plan.needs_tools or plan.intent == "other":
         return plan
-    request = message.strip().split("\n\n")[0]
     if not has_history or CURRENT_STATE.search(request):
         return plan.model_copy(update={"needs_tools": True})
     return plan
@@ -275,6 +331,7 @@ def rearm_tools(catalogue: list[str]) -> list[str]:
 
 
 def needs_approval(plan: TurnPlan) -> bool:
-    """Only a Webex action the user confirmed goes to the approval node. Maya's intents
-    never reach it, so Maya has no route to a write."""
-    return plan.action_confirmed and scope_of(plan) == "webex"
+    """Only a confirmed access request goes to the approval node. Maya's intents never
+    reach it, so Maya has no route to a write; nor do other Webex intents (a confirmed
+    equipment turn has no approval type to request)."""
+    return plan.action_confirmed and plan.intent == "access_request"

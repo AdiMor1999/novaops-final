@@ -19,7 +19,7 @@ from langchain_core.messages import ToolMessage
 from pydantic import BaseModel, Field
 
 from agent.policy import TurnPlan
-from agent.schemas import LABEL, OnboardingChecklist
+from agent.schemas import LABEL, AccessDecision, OnboardingChecklist
 
 Status = Literal["completed", "blocked", "pending", "needs_human", "failed"]
 STATUSES: tuple[str, ...] = Status.__args__
@@ -60,7 +60,9 @@ class TurnOutcome(BaseModel):
     tools_called: list[str] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)  # documents that reached the model
     approval_id: str | None = None
+    approvals: list[str] = Field(default_factory=list)  # every approval this case requested
     checklist: OnboardingChecklist | None = None
+    access_decision: AccessDecision | None = None
     handoff: dict | None = None  # {"handoff": WebexHandoff, "result": PendingAccessResult}
 
 

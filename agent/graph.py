@@ -1,17 +1,20 @@
 """The agent graph: one graph, both scopes.
 
     START ─(fresh history over threshold)→ distil ─┐
-      └──────────────────────────────────────────→ classify → scope
+      └──────────────────────────────────────────→ classify ─(subject not in thread)→ lookup_subject
+                                                      └──────────────────────────────────┴→ scope
     scope ├ confirmed access, subject preboarding → handoff ────────────→ answer
-          ├ confirmed access, subject not verified → unverified ────────→ answer
+          ├ confirmed access, no subject verified → unverified ─────────→ answer
           └→ gather ⇄ tools                        (≤ MAX_TOOL_CALLS per turn)
                │  ├→ rearm → gather                (once, reads only)
                │  └→ refine → gather               (once: the checklist was never read)
-               ├→ request_approval → await_approval (interrupt)
-               │        ↑ pending              │ resume
-               │        └──── write_gate ←─────┘
-               │               ├ approved → gather (released write visible)
-               │               └ otherwise → answer
+               ├→ request_approval ─(already approved for this request)→ write_gate
+               │      └→ decide → await_approval (interrupt)
+               │                ↑ pending        │ resume
+               │                └── write_gate ←─┘
+               │                     ├ approved → gather (the write, forced) → tools → decide → answer
+               │                     ├ rejected → decide → answer
+               │                     └ otherwise → answer
                └→ cite (one repair) → checklist (onboarding rows only) → answer → END
 
 Starting code: Lesson 10 `02-dynamic-tool-loadout/graph.py` and
@@ -34,9 +37,19 @@ of Lesson 11 `02-instrument-agent/graph.py`. Changes:
   the subject check and the Maya handoff through an injected `WebexPort`
   (agent/handoff.py, agent/ports.py); the per-sentence citation check with one
   repair call (`cite`); and the forced `submit_checklist` record (agent/records.py).
+- Task #5, Webex: `lookup_subject` calls `get_employee` from code when a confirmed
+  access request names someone the thread has not looked up. The approval node reads
+  the case from code (subscription, tickets, access requests, approvals) and asks for
+  the approvals of the open request, reusing AP001 and AP002 (agent/webex.py). `decide`
+  builds the `AccessDecision` from a forced `submit_access_decision` draft plus code
+  fields, before the pause and again after the released write. When the gate opens,
+  the next model call is forced to the released write. Calls made by code go into the
+  thread as tool call and result pairs, so they are cited, traced and listed like the
+  model's, but they do not count against the model's per-turn cap.
 """
 
 import json
+import uuid
 from dataclasses import asdict
 from typing import Annotated, TypedDict
 
@@ -48,11 +61,12 @@ from langfuse.langchain import CallbackHandler
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.types import interrupt
-from pydantic import BaseModel
 
-from agent import config
+from agent import config, webex
 from agent.gate import GateDecision, release_write
-from agent.handoff import action_route, build_handoff, resolve_subject, route_scope
+from agent.handoff import (action_route, build_handoff, lookup_outcome, resolve_subject,
+                           route_scope, subject_in_thread, subject_query,
+                           system_named_in_message)
 from agent.mcp_tools import as_langchain_tools, call_tool
 from agent.memory import (ConversationMemory, distiller_messages, memory_is_safe,
                           needs_distillation, render_memory)
@@ -61,8 +75,9 @@ from agent.outcome import (cited_labels, gate_text, handoff_text, known_labels,
 from agent.policy import (APPROVAL_TOOL, CHECKLIST_TOOL, MAX_TOOL_CALLS, PLANNER_PROMPT,
                           RELEASES, TurnPlan, checked_plan, missing_checklist, needs_approval,
                           rearm_tools, refine_note, visible_tools)
-from agent.records import CHECKLIST_PROMPT, Validated
-from agent.schemas import OnboardingChecklist
+from agent.ports import WEBEX_APPROVER
+from agent.records import CHECKLIST_PROMPT, DECISION_PROMPT, Validated
+from agent.schemas import DecisionDraft, OnboardingChecklist
 from agent.structured import ParseFailed, parse_with_repair
 
 KEEP_TURNS = 4          # earlier turns shown to the model, whole turns only
@@ -110,18 +125,14 @@ ASSISTANT_PROMPT = (
     "constraints in force. Leave out topics the user closed.\n"
     "- If documents disagree, newer or more specific guidance (a later memo) overrides "
     "older or more general guidance (a policy); say which one you followed.\n"
+    "- Asked for steps or a process, even as 'can you find the steps?', write the steps "
+    "out from the section text that says what to do (for example a troubleshooting "
+    "section), with its label. Naming the article, its owner or its date is not an "
+    "answer.\n"
     "- If the evidence does not answer the question, say what is missing. Do not guess.\n"
     "- Never say access was granted or a request was filed unless a tool result shows it.\n"
     "- Answer in at most six sentences, with no preamble."
 )
-
-
-class ProposedAction(BaseModel):
-    """What the approval node asks for. Taken by code from this turn's tool results."""
-
-    request_type: str
-    record_id: str
-    approver_id: str
 
 
 class AgentState(TypedDict, total=False):
@@ -137,10 +148,17 @@ class AgentState(TypedDict, total=False):
     refined: bool            # the one refined round of this turn has run
     refine: str              # what the refined round asks for, shown to the model
     force: str               # a tool the next gather call must call (the refined round)
-    turn_tools: list[str]    # tool calls made this turn, in order
+    turn_tools: list[str]    # tool calls made this turn, in order, by the model and by code
+    cap_offset: int          # calls in turn_tools that do not count against the model's cap
     turn_errors: list[str]
-    approval: dict | None    # the request_approval row, once requested
+    approval: dict | None    # the request_approval row that gates the write (AP001)
+    approvals: list[dict]    # every request_approval row of this case (AP001, AP002)
+    case: dict | None        # {employee_id, system, system_id, record_id} of the access case
     gate: dict | None        # the last GateDecision
+    subject_note: str        # why lookup_subject verified nobody
+    decision: dict | None    # the AccessDecision
+    decision_from: str       # id of the user message that opened the access case
+    decided: bool            # decide() set this run's answer and status
     answer: str
     citations: list[str]
     status: str
@@ -271,17 +289,41 @@ def gather_messages(state: AgentState, *, with_tools: bool) -> list:
     return [SystemMessage(system), turn[0]]
 
 
-def propose_action(state: AgentState) -> ProposedAction | None:
-    """The approval to request, from approval rows the tools returned this turn: the
-    first open row of a type that releases a write. The model does not choose it.
-    Task #5 widens this for the Webex flows (W-S-01)."""
-    for result in tool_results(current_turn(state["messages"]), "get_approvals"):
-        for row in result.get("rows", []):
-            if row.get("status") in ("needed", "pending") and row.get("request_type") in RELEASES:
-                return ProposedAction(request_type=row["request_type"],
-                                      record_id=row["request_id"],
-                                      approver_id=row["approver_id"])
+def earlier_result(messages: list, name: str, args: dict) -> dict | None:
+    """A successful result of the same call already in `messages`, so code does not
+    repeat a read the model made this turn."""
+    ids = {c["id"] for m in messages if isinstance(m, AIMessage)
+           for c in (m.tool_calls or []) if c["name"] == name and c["args"] == args}
+    for message in messages:
+        if isinstance(message, ToolMessage) and message.tool_call_id in ids \
+                and message.status != "error":
+            found = tool_results([message])
+            if found:
+                return found[0]
     return None
+
+
+def write_note(case: dict, approval: dict) -> str:
+    return (f"Approval {approval['approval_id']} for {case['record_id']} is approved. Call "
+            f"create_access_request now for employee {case['employee_id']}, software "
+            f"{case['system']}, with the business justification from this conversation "
+            "(the one drafted, or the existing request's). It records a request; it does "
+            "not grant access.")
+
+
+def decision_messages(window: list) -> list:
+    """The forced draft's input: every message since the user opened the access case,
+    tool traffic as text."""
+    return [SystemMessage(f"{DECISION_PROMPT}\nToday is {config.today().isoformat()}."),
+            HumanMessage(f"Conversation and tool results:\n"
+                         f"{render_transcript(window, 10 ** 6)}")]
+
+
+def from_message(messages: list, message_id: str | None) -> list:
+    for i, message in enumerate(messages):
+        if message.id == message_id:
+            return list(messages[i:])
+    return current_turn(messages)
 
 
 # The graph --------------------------------------------------------------------------
@@ -338,12 +380,13 @@ def onboarding_rows_this_turn(state: AgentState) -> bool:
 
 
 def build_graph(session, specs: list, checkpointer, *, model, planner, distiller=None,
-                checklist=None, port=None):
+                checklist=None, decision=None, port=None):
     """`session` is an open MCP ClientSession, `specs` its list_tools() result.
     `model` is the chat model (bind_tools), `planner` the structured TurnPlan model
     (`with_structured_output(TurnPlan, include_raw=True)`), `distiller` the structured
-    ConversationMemory model, `checklist` the forced `submit_checklist` model, and
-    `port` the WebexPort for this turn. `checkpointer` is injected and must be durable."""
+    ConversationMemory model, `checklist` the forced `submit_checklist` model,
+    `decision` the forced `submit_access_decision` model, and `port` the WebexPort for
+    this turn. `checkpointer` is injected and must be durable."""
     tools = {t.name: t for t in as_langchain_tools(session, specs)}
     catalogue = sorted(tools)
     bound: dict[tuple, object] = {}
@@ -360,6 +403,20 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
         # to be replaced with [], because ensure_config() skips None and would inherit
         # them from the running node's context.
         return {"configurable": config["configurable"], "callbacks": []}
+
+    async def code_call(name: str, args: dict, config: RunnableConfig):
+        """A tool call made by code, as a call and result pair for the thread, the
+        decoded result (None on an error) and the error text."""
+        call_id = f"code_{uuid.uuid4().hex[:16]}"
+        request = AIMessage(content="", tool_calls=[
+            {"name": name, "args": args, "id": call_id, "type": "tool_call"}])
+        try:
+            result = await call_tool(session, name, args, config["configurable"])
+        except ToolException as exc:
+            return [request, ToolMessage(content=str(exc), tool_call_id=call_id, name=name,
+                                         status="error")], None, str(exc)
+        return [request, ToolMessage(content=json.dumps(result), tool_call_id=call_id,
+                                     name=name)], result, None
 
     async def distil(state: AgentState) -> dict:
         """Lesson 10 stage 3. A memory that fails to parse after one repair, or that
@@ -380,13 +437,40 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
                   "user_group": configurable["user_group"]}
         plan = await parse_with_repair(planner, planner_messages(state, caller), TurnPlan)
         plan = checked_plan(plan, has_history=len(turn_starts(state["messages"])) > 1,
-                            message=message_text(state["messages"][-1]))
+                            message=message_text(state["messages"][-1]),
+                            caller_id=caller["caller_id"])
         return {"plan": plan.model_dump(), "intent": plan.intent, "caller": caller,
                 "rearmed": False, "force": "",
                 "refined": False, "refine": "",
-                "turn_tools": [], "turn_errors": [], "approval": None, "gate": None,
+                "turn_tools": [], "cap_offset": 0, "turn_errors": [], "approval": None,
+                "approvals": [], "case": None, "gate": None, "subject_note": "",
+                "decision": None, "decision_from": "", "decided": False,
                 "answer": "", "citations": [], "status": "", "route": None,
                 "handoff": None, "draft": "", "uncited": [], "checklist": None}
+
+    async def lookup_subject(state: AgentState, config: RunnableConfig) -> dict:
+        """A confirmed access request for someone the thread never looked up (the
+        Rachel scenario; "go ahead" with no lookup turn). Code asks get_employee for
+        the id or name the planner named. One match becomes the plan's subject; none
+        or several leave it unverified, and scope routes the turn to needs_human."""
+        plan = TurnPlan(**state["plan"])
+        query = subject_query(plan, state["messages"])
+        pair, result, error = await code_call("get_employee", {"query": query}, config)
+        update = {"messages": pair, "turn_tools": [*state["turn_tools"], "get_employee"],
+                  "cap_offset": state.get("cap_offset", 0) + 1}
+        if error:
+            update["turn_errors"] = [*state["turn_errors"], f"get_employee: {error}"]
+            update["subject_note"] = (f"Looking up {query!r} failed ({error}), so nothing "
+                                      "was requested.")
+            return update
+        employee_id, why = lookup_outcome((result or {}).get("rows", []))
+        if employee_id:
+            update["plan"] = plan.model_copy(
+                update={"subject_employee_id": employee_id}).model_dump()
+        else:
+            update["subject_note"] = (f"Looking up {query!r}: {why}, so nothing was requested. "
+                                      "Say which employee (by id) the access is for.")
+        return update
 
     def scope(state: AgentState) -> dict:
         """A dict lookup, not a model call: the model says what the turn is about, and
@@ -419,11 +503,11 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
 
     def unverified(state: AgentState) -> dict:
         plan = TurnPlan(**state["plan"])
+        named = plan.subject_employee_id or plan.subject_name or "the person named"
         return {"gate": asdict(GateDecision(
-            False, "unverified",
-            f"No employee record looked up in this conversation matches "
-            f"{plan.subject_employee_id or 'the person named'}, so nothing was handed off. "
-            "Look the person up first."))}
+            False, "unverified", state.get("subject_note") or
+            f"No employee record matches {named}, so nothing was handed off or requested. "
+            "Say which employee (by id) the access is for."))}
 
     def forced(name: str):
         """The model bound to one tool it must call (Converse `toolChoice: tool`)."""
@@ -432,8 +516,11 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
             bound[key] = model.bind_tools([tools[name]], tool_choice=name)
         return bound[key]
 
+    def model_calls(state: AgentState) -> int:
+        return len(state["turn_tools"]) - state.get("cap_offset", 0)
+
     async def gather(state: AgentState) -> dict:
-        names = state["visible_tools"] if len(state["turn_tools"]) < MAX_TOOL_CALLS else []
+        names = state["visible_tools"] if model_calls(state) < MAX_TOOL_CALLS else []
         if state.get("force") and names:
             runnable = forced(state["force"])
         else:
@@ -444,6 +531,7 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
     async def run_tools(state: AgentState, config: RunnableConfig) -> dict:
         last = state["messages"][-1]
         called, errors = list(state["turn_tools"]), list(state["turn_errors"])
+        offset = state.get("cap_offset", 0)
         replies = []
         for call in last.tool_calls:
             if call["name"] not in state["visible_tools"]:
@@ -452,7 +540,7 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
                     tool_call_id=call["id"], name=call["name"], status="error"))
                 errors.append(f"{call['name']}: not visible")
                 continue
-            if len(called) >= MAX_TOOL_CALLS:
+            if len(called) - offset >= MAX_TOOL_CALLS:
                 replies.append(ToolMessage(
                     content=f"Not run: the limit of {MAX_TOOL_CALLS} tool calls per "
                             "message is reached. Answer with what you have.",
@@ -492,17 +580,86 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
                 "messages": [RemoveMessage(id=state["messages"][-1].id)]}
 
     async def request_approval(state: AgentState, config: RunnableConfig) -> dict:
-        proposal = propose_action(state)
-        if proposal is None:
-            return {"gate": asdict(GateDecision(
-                False, "missing", "No open approval was found for this action, so none "
-                                  "was requested."))}
-        try:
-            row = await call_tool(session, APPROVAL_TOOL, proposal.model_dump(),
-                                  config["configurable"])
-        except ToolException as exc:
-            return {"gate": asdict(GateDecision(False, "error", f"request_approval: {exc}"))}
-        return {"approval": row}
+        """The approval transition (spec §9 steps 2 to 6), from code. Read the case:
+        the subscription, the subject's tickets and access requests, two knowledge-
+        base searches (the problem and the rule), and the approval rows of the open
+        request. Then ask for each approval with request_approval, which reuses
+        AP001 and AP002 rather than creating rows. Nothing here is chosen by the
+        model, and nothing here writes a business record."""
+        plan = TurnPlan(**state["plan"])
+        messages = state["messages"]
+        turn = current_turn(messages)
+        out: list = []
+        last = messages[-1]
+        if isinstance(last, AIMessage) and not last.tool_calls:
+            # The model's unchecked prose ("I've filed it") never stays in the thread.
+            out.append(RemoveMessage(id=last.id))
+        seen = list(turn)
+        called, errors = list(state["turn_tools"]), list(state["turn_errors"])
+        offset = state.get("cap_offset", 0)
+
+        async def run(name: str, args: dict, *, reuse: bool = True) -> dict | None:
+            nonlocal offset
+            if reuse and (hit := earlier_result(seen, name, args)) is not None:
+                return hit
+            pair, result, error = await code_call(name, args, config)
+            out.extend(pair)
+            seen.extend(pair)
+            called.append(name)
+            offset += 1
+            if error:
+                errors.append(f"{name}: {error}")
+            return result
+
+        def finish(**update) -> dict:
+            return {"messages": out, "turn_tools": called, "turn_errors": errors,
+                    "cap_offset": offset, "decision_from": turn[0].id, **update}
+
+        def refuse(state_name: str, reason: str) -> dict:
+            return finish(gate=asdict(GateDecision(False, state_name, reason)))
+
+        subject = subject_in_thread(messages, plan)
+        if subject is None:
+            return refuse("unverified", "No verified employee to act for.")
+        employee_id = subject["employee_id"]
+        system = plan.system or (system_named_in_message(messages) or {}).get("system_name")
+        if not system:
+            return refuse("missing", "The request names no system, so no approval was requested.")
+        await run("check_software_subscription", {"software": system})
+        await run("list_employee_tickets", {"employee_id": employee_id})
+        await run("get_access_requests", {"employee_id": employee_id})
+        for query in webex.CASE_QUERIES:
+            await run("search_knowledge_base", {"query": query.format(system=system)})
+        system_id = webex.system_id(seen, system)
+        if system_id is None:
+            return refuse("missing", f"No subscription or access request identifies the system "
+                                     f"{system!r}, so no approval was requested.")
+        existing = webex.open_access_request(seen, employee_id, system_id)
+        if existing:
+            record_id = existing["request_id"]
+            await run("get_approvals", {"record_id": record_id})
+            asks = webex.approval_requests(
+                [r for r in webex.rows_of(seen, "get_approvals")
+                 if r.get("request_id") == record_id],
+                record_id)
+        else:
+            record_id = webex.new_request_record(employee_id, system_id)
+            asks = [{"request_type": "access_request", "record_id": record_id,
+                     "approver_id": WEBEX_APPROVER, "employee_id": employee_id,
+                     "software": system}]
+        rows = [row for ask in asks
+                if (row := await run(APPROVAL_TOOL, ask, reuse=False)) is not None]
+        gating = next((r for r in rows if r.get("request_type") in RELEASES), None)
+        if gating is None:
+            return refuse("error", "request_approval failed, so nothing is waiting on an "
+                                   f"approver: {'; '.join(errors[-1:])}")
+        if not gating.get("this_request"):
+            return refuse("missing", f"{gating['approval_id']} is already held by another "
+                                     f"request and waits on {gating['approver_id']}; this "
+                                     "request cannot use it, and no new approval was created.")
+        case = {"employee_id": employee_id, "system": system, "system_id": system_id,
+                "record_id": record_id}
+        return finish(approval=gating, approvals=rows, case=case)
 
     def await_approval(state: AgentState) -> dict:
         """The pause. interrupt() returns here when run_turn() resumes the thread. The
@@ -510,18 +667,45 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
         application code wrote with record_approval_decision, and write_gate reads it."""
         approval = state["approval"]
         interrupt({"approval_id": approval["approval_id"], "record_id": approval["request_id"],
-                   "approver_id": approval["approver_id"], "request_id": state["request_id"]})
+                   "approver_id": approval["approver_id"], "request_id": state["request_id"],
+                   "also_requested": [a["approval_id"] for a in state.get("approvals") or []
+                                      if a["approval_id"] != approval["approval_id"]]})
         return {}
 
     async def write_gate(state: AgentState, config: RunnableConfig) -> dict:
         approval = state["approval"]
+        # A consumed approval this request already holds is a replay of the same
+        # request; the server answers it with the row it returned the first time.
+        replay = bool(approval.get("this_request") and approval.get("consumed"))
         decision = await release_write(session, config["configurable"],
                                        record_id=approval["request_id"],
-                                       approval_id=approval["approval_id"])
-        update = {"gate": asdict(decision)}
+                                       approval_id=approval["approval_id"], replay=replay)
+        update = {"gate": asdict(decision), "decided": False}
         if decision.open:
-            update["visible_tools"] = [n for n in decision.released if n in tools]
+            released = [n for n in decision.released if n in tools]
+            update.update(visible_tools=released, force=released[0] if released else "",
+                          refine=write_note(state["case"], approval),
+                          # The resumed run gets a fresh model budget for the write.
+                          cap_offset=len(state["turn_tools"]))
         return update
+
+    async def decide(state: AgentState) -> dict:
+        """The AccessDecision. The model drafts the observed facts and next steps through
+        the forced submit_access_decision call, validated with every label checked
+        against what tools returned (one repair, then ParseFailed). Code adds the
+        status, blocking reason, reused records and actions, and writes the answer."""
+        case = state["case"]
+        window = from_message(state["messages"], state.get("decision_from"))
+        known = known_labels(state["messages"])
+        draft = await parse_with_repair(Validated(decision, DecisionDraft, known),
+                                        decision_messages(window), DecisionDraft)
+        record = webex.assemble_decision(draft, messages=window, employee_id=case["employee_id"],
+                                         system=case["system"], system_id=case["system_id"],
+                                         gate=state.get("gate"))
+        text = webex.render_decision(record, state.get("approval"), state.get("gate"))
+        valid, _ = cited_labels(text, known)
+        return {"decision": record.model_dump(), "answer": text, "status": record.status,
+                "citations": valid, "decided": True, "messages": [AIMessage(content=text)]}
 
     async def cite(state: AgentState) -> dict:
         """Every fact-stating sentence on a turn with tool results must carry a label.
@@ -551,6 +735,8 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
         return {"checklist": record.model_dump()}
 
     def answer(state: AgentState) -> dict:
+        if state.get("decided"):
+            return {}  # decide() wrote the answer, status and citations from the decision
         gate = state.get("gate")
         last = state["messages"][-1]
         done = state.get("handoff")
@@ -585,11 +771,24 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
             return "rearm"
         if needs_approval(plan) and state.get("approval") is None and state.get("gate") is None:
             return "request_approval"
+        if needs_approval(plan) and state.get("approval") and (state.get("gate") or {}).get("open"):
+            return "decide"  # the gate opened but the model answered without the write
         if state["turn_tools"] and not state.get("refined") and not state.get("gate") \
                 and len(state["turn_tools"]) < MAX_TOOL_CALLS \
                 and missing_checklist(plan, state["turn_tools"]):
             return "refine"
         return "cite"
+
+    def after_tools(state: AgentState) -> str:
+        gate = state.get("gate")
+        if gate and gate["open"] and state["turn_tools"] \
+                and state["turn_tools"][-1] in gate["released"]:
+            return "decide"
+        return "gather"
+
+    def after_classify(state: AgentState) -> str:
+        plan = TurnPlan(**state["plan"])
+        return "lookup_subject" if subject_query(plan, state["messages"]) else "scope"
 
     def after_start(state: AgentState) -> str:
         if distiller is not None and needs_distillation(state, planner_transcript):
@@ -608,17 +807,28 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
         return "answer"
 
     def after_request(state: AgentState) -> str:
-        return "await_approval" if state.get("approval") else "answer"
+        approval = state.get("approval")
+        if not approval or state.get("gate"):
+            return "answer"
+        if approval.get("status") == "approved":
+            return "write_gate"  # decided before this run: no pause, release now
+        return "decide"
+
+    def after_decide(state: AgentState) -> str:
+        return "await_approval" if state["status"] == "pending" else "answer"
 
     def after_gate(state: AgentState) -> str:
         gate = state["gate"]
         if gate["open"]:
             return "gather"
-        return "await_approval" if gate["state"] == "pending" else "answer"
+        if gate["state"] == "pending":
+            return "await_approval"
+        return "decide" if gate["state"] == "rejected" else "answer"
 
     graph = StateGraph(AgentState)
     graph.add_node("distil", distil)
     graph.add_node("classify", classify)
+    graph.add_node("lookup_subject", lookup_subject)
     graph.add_node("scope", scope)
     graph.add_node("gather", gather)
     graph.add_node("tools", run_tools)
@@ -627,6 +837,7 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
     graph.add_node("request_approval", request_approval)
     graph.add_node("await_approval", await_approval)
     graph.add_node("write_gate", write_gate)
+    graph.add_node("decide", decide)
     graph.add_node("handoff", handoff)
     graph.add_node("unverified", unverified)
     graph.add_node("cite", cite)
@@ -635,20 +846,24 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
 
     graph.add_conditional_edges(START, after_start, ["distil", "classify"])
     graph.add_edge("distil", "classify")
-    graph.add_edge("classify", "scope")
+    graph.add_conditional_edges("classify", after_classify, ["lookup_subject", "scope"])
+    graph.add_edge("lookup_subject", "scope")
     graph.add_conditional_edges("scope", after_scope, ["handoff", "unverified", "gather"])
     graph.add_edge("handoff", "answer")
     graph.add_edge("unverified", "answer")
     graph.add_conditional_edges("gather", after_gather, ["tools", "rearm", "refine",
-                                                         "request_approval", "cite"])
+                                                         "request_approval", "decide", "cite"])
     graph.add_edge("refine", "gather")
     graph.add_conditional_edges("cite", after_cite, ["checklist", "answer"])
     graph.add_edge("checklist", "answer")
-    graph.add_edge("tools", "gather")
+    graph.add_conditional_edges("tools", after_tools, ["gather", "decide"])
     graph.add_edge("rearm", "gather")
-    graph.add_conditional_edges("request_approval", after_request, ["await_approval", "answer"])
+    graph.add_conditional_edges("request_approval", after_request,
+                                ["decide", "write_gate", "answer"])
+    graph.add_conditional_edges("decide", after_decide, ["await_approval", "answer"])
     graph.add_edge("await_approval", "write_gate")
-    graph.add_conditional_edges("write_gate", after_gate, ["gather", "await_approval", "answer"])
+    graph.add_conditional_edges("write_gate", after_gate,
+                                ["gather", "await_approval", "decide", "answer"])
     graph.add_edge("answer", END)
 
     # The Langfuse callback is bound to the compiled graph (Lesson 11), so every node

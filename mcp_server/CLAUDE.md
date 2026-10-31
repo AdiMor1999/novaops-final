@@ -43,11 +43,14 @@ inside its transaction:
 
 1. Checks the approval row: it exists, matches this action, target employee, system and
    request, is approved, is unused and is not expired.
-2. Looks up the idempotency key. If a row already exists, return it with `reused: true` and
-   write nothing.
-3. Writes the row, marks the approval consumed, commits.
+2. Looks up the idempotency key, then an open row for the same employee and system
+   (AR001, T001). If a row exists, return it with `reused: true` and write no business
+   row. The first time a key returns an existing row, the key is stored and the approval
+   is consumed by it: returning AR001 is the release.
+3. Otherwise writes the row, marks the approval consumed, commits.
 
-A replayed approval is consumed once. `create_access_request` records a request with status
+A replayed approval is consumed once: a replay with the same key passes the check and gets
+the same row; any other key is refused. `create_access_request` records a request with status
 `pending_approval`; it never provisions access.
 
 ### `request_approval`
@@ -55,9 +58,13 @@ A replayed approval is consumed once. `create_access_request` records a request 
 Creates the approval row that a gated write later needs, so it cannot require an approval
 itself. It also writes the row's scope to `approval_controls` (employee, system, caller,
 workflow `request_id`, expiry), which is what the gated write matches against. A seed
-approval such as `AP001` gets its scope the first time a workflow requests it. It is idempotent instead: the key is (request type, request id). If an open row exists
-for that key, it returns that row with `reused: true` and writes nothing. It only ever creates
-rows with status `pending`. It cannot approve, and nothing it writes opens a gated write.
+approval such as `AP001` gets its scope the first time a workflow requests it. It is
+idempotent instead: the key is (request type, request id). If an open row exists for that
+key, it returns that row with `reused: true` and writes nothing. A row bound to the calling
+workflow request is returned whatever its status (`this_request: true`), so a replay after
+the release finds the consumed approval instead of creating a second one. It only ever
+creates rows with status `pending`. It cannot approve, and nothing it writes opens a gated
+write.
 
 ### `record_approval_decision`
 

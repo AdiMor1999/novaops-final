@@ -215,15 +215,23 @@ def get_employee(query: str, ctx: Context) -> dict:
 
     Returns every match, each with a `citation` label such as [db:employees#E001] to
     cite for facts from that row. Several employees share a first name, so check the
-    id before acting on a name. `systems_allowed_by_role` is what the role entitles someone to,
+    id before acting on a name. A misspelt full name ('rrachel stein') returns the
+    employee it is a typo of, with `match: similar`; a different name returns nothing. `systems_allowed_by_role` is what the role entitles someone to,
     not what they have been given.
 
     Args:
         query: An employee id (e.g. 'E001'), an email, or a name.
     """
-    return _serve(ctx, "get_employee", {"query": query}, _db(
-        lambda conn, _c: _rows(db.get_employee(conn, query), f"No employee matches {query!r}.",
-                         ("employees", "employee_id"))))
+    def work(conn, _caller):
+        found = db.get_employee(conn, query)
+        if found:
+            return _rows(found, "", ("employees", "employee_id"))
+        close = db.similar_employees(conn, query)
+        note = (f"No name contains {query!r} exactly; these employees match words of it. "
+                "Check the name and id before acting on one." if close else "")
+        return _rows(close, f"No employee matches {query!r}.", ("employees", "employee_id"),
+                     **({"match": "similar", "match_note": note} if close else {}))
+    return _serve(ctx, "get_employee", {"query": query}, _db(work))
 
 
 @mcp.tool()
@@ -357,6 +365,12 @@ def get_approvals(ctx: Context, record_id: str = "", employee_id: str = "") -> d
 
 # Approval request and gated writes --------------------------------------------------
 
+def _cited(row: dict, table: str, key: str) -> dict:
+    """A write returns the row it wrote or reused, labelled like a read row, so the
+    actions an AccessDecision reports cite the row they touched."""
+    return {**row, "citation": db_label(table, row[key])}
+
+
 @mcp.tool()
 def request_approval(request_type: str, record_id: str, approver_id: str, ctx: Context,
                      employee_id: str = "", software: str = "") -> dict:
@@ -364,7 +378,8 @@ def request_approval(request_type: str, record_id: str, approver_id: str, ctx: C
     `pending`, or returns the open one for the same request (reused: true).
 
     It does not approve anything and does not file the request. The run that calls it
-    ends pending until the approver decides.
+    ends pending until the approver decides. `this_request: true` means the row is
+    bound to the calling workflow request, the only one its approval can release.
 
     Args:
         request_type: 'access_request', 'subscription_expansion' or 'ticket'.
@@ -376,8 +391,9 @@ def request_approval(request_type: str, record_id: str, approver_id: str, ctx: C
     args = {"request_type": request_type, "record_id": record_id, "approver_id": approver_id,
             "employee_id": employee_id, "software": software}
     return _serve(ctx, "request_approval", args, _db(
-        lambda conn, caller: writes.request_approval(
-            conn, caller, request_type, record_id, approver_id, employee_id, software)))
+        lambda conn, caller: _cited(writes.request_approval(
+            conn, caller, request_type, record_id, approver_id, employee_id, software),
+            "approvals", "approval_id")))
 
 
 @mcp.tool()
@@ -398,8 +414,9 @@ def create_access_request(employee_id: str, software: str, business_justificatio
     args = {"employee_id": employee_id, "software": software,
             "business_justification": business_justification, "access_level": access_level}
     return _serve(ctx, "create_access_request", args, _db(
-        lambda conn, caller: writes.create_access_request(
-            conn, caller, employee_id, software, business_justification, access_level)))
+        lambda conn, caller: _cited(writes.create_access_request(
+            conn, caller, employee_id, software, business_justification, access_level),
+            "access_requests", "request_id")))
 
 
 @mcp.tool()
@@ -422,8 +439,9 @@ def create_ticket(employee_id: str, subject: str, description: str, category: st
     args = {"employee_id": employee_id, "subject": subject, "description": description,
             "category": category, "software": software, "priority": priority}
     return _serve(ctx, "create_ticket", args, _db(
-        lambda conn, caller: writes.create_ticket(
-            conn, caller, employee_id, subject, description, category, software, priority)))
+        lambda conn, caller: _cited(writes.create_ticket(
+            conn, caller, employee_id, subject, description, category, software, priority),
+            "tickets", "ticket_id")))
 
 
 def main() -> None:
