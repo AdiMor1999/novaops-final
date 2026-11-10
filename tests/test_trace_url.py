@@ -16,7 +16,7 @@ def langfuse_configured():
     if not all(os.environ.get(k) for k in LANGFUSE_KEYS):
         pytest.skip("Langfuse keys are not set")
     if os.environ.get("LANGFUSE_TRACING_ENABLED", "").lower() == "false":
-        pytest.skip("tracing is switched off (LANGFUSE_TRACING_ENABLED=false)")
+        pytest.skip("tracing is off in tests; set NOVAOPS_TEST_TRACING=true to run this")
 
 
 async def test_trace_url_is_set_on_the_outcome_and_the_root_span(seeded, monkeypatch,

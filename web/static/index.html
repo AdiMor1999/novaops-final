@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NovaOps chat</title>
+<style>
+:root {
+  --bg: #f5f3ee;
+  --panel: #fbfaf7;
+  --raised: #ffffff;
+  --ink: #1c1d1f;
+  --ink-2: #4a4c50;
+  --ink-3: #8a8b8e;
+  --line: #e4e0d7;
+  --line-2: #d6d1c6;
+  --accent: #0f6b5c;
+  --accent-ink: #ffffff;
+  --accent-soft: #e2efeb;
+  --maya: #a2522c;
+  --maya-soft: #f6e7de;
+  --webex: #3a4cc7;
+  --webex-soft: #e5e8fa;
+  --ok: #1f7a4a;   --ok-soft: #e1f1e7;
+  --wait: #9a6400; --wait-soft: #f8edd5;
+  --bad: #b3261e;  --bad-soft: #f9e2df;
+  --human: #6b3fa0; --human-soft: #eee5f7;
+  --shadow: 0 1px 2px rgba(28, 29, 31, .04), 0 4px 16px rgba(28, 29, 31, .05);
+  --serif: "Iowan Old Style", "Charter", "Palatino Linotype", Georgia, serif;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151617; --panel: #1b1c1e; --raised: #222326; --ink: #ecebe7; --ink-2: #b4b3ae;
+    --ink-3: #7d7d7a; --line: #2c2d30; --line-2: #3a3b3f; --accent: #4cc2a8;
+    --accent-ink: #0d1f1b; --accent-soft: #19302b; --maya: #e59a72; --maya-soft: #35241b;
+    --webex: #93a2ff; --webex-soft: #22263f; --ok: #6fd39b; --ok-soft: #183023;
+    --wait: #f0bd5c; --wait-soft: #33291a; --bad: #ff8a80; --bad-soft: #3a1f1d;
+    --human: #c7a3f2; --human-soft: #2c2238;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151617; --panel: #1b1c1e; --raised: #222326; --ink: #ecebe7; --ink-2: #b4b3ae;
+  --ink-3: #7d7d7a; --line: #2c2d30; --line-2: #3a3b3f; --accent: #4cc2a8;
+  --accent-ink: #0d1f1b; --accent-soft: #19302b; --maya: #e59a72; --maya-soft: #35241b;
+  --webex: #93a2ff; --webex-soft: #22263f; --ok: #6fd39b; --ok-soft: #183023;
+  --wait: #f0bd5c; --wait-soft: #33291a; --bad: #ff8a80; --bad-soft: #3a1f1d;
+  --human: #c7a3f2; --human-soft: #2c2238;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 20px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+button, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+.mono { font-family: var(--mono); font-size: .86em; }
+
+.app {
+  display: grid; height: 100vh;
+  grid-template-columns: 272px minmax(0, 1fr) 320px;
+}
+
+/* Left rail */
+.rail {
+  background: var(--panel); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; min-height: 0;
+}
+.brand { padding: 22px 22px 18px; display: flex; align-items: baseline; gap: 8px; }
+.brand h1 { margin: 0; font: 600 22px/1 var(--serif); letter-spacing: -.01em; }
+.brand span { font-size: 12px; color: var(--ink-3); letter-spacing: .04em; text-transform: uppercase; }
+.section-label {
+  font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink-3); margin: 0 0 8px;
+}
+.caller { padding: 0 16px 16px; }
+.caller-card {
+  background: var(--raised); border: 1px solid var(--line); border-radius: 12px;
+  padding: 10px 12px; box-shadow: var(--shadow);
+}
+.caller-card select {
+  width: 100%; border: 0; background: transparent; font-weight: 600; padding: 2px 0;
+  outline: none; appearance: none; -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-3) 50%),
+                    linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+  background-position: calc(100% - 9px) 55%, calc(100% - 4px) 55%;
+  background-size: 5px 5px; background-repeat: no-repeat; padding-right: 18px;
+}
+.caller-meta { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; }
+.caller-meta .mono { color: var(--ink-3); }
+.new-thread {
+  margin: 0 16px 14px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line-2);
+  background: transparent; display: flex; align-items: center; gap: 8px; font-weight: 500;
+  transition: background .15s, border-color .15s;
+}
+.new-thread:hover { background: var(--raised); border-color: var(--ink-3); }
+.threads { flex: 1; overflow-y: auto; padding: 4px 10px 16px; }
+.threads .section-label { padding: 0 6px; }
+.thread {
+  width: 100%; text-align: left; border: 0; background: transparent; border-radius: 9px;
+  padding: 8px 10px; display: grid; grid-template-columns: 8px 1fr; gap: 2px 10px;
+  align-items: center; color: var(--ink-2);
+}
+.thread:hover { background: var(--raised); }
+.thread.active { background: var(--raised); color: var(--ink); box-shadow: var(--shadow); }
+.thread .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line-2); }
+.thread .dot.pending { background: var(--wait); box-shadow: 0 0 0 3px var(--wait-soft); }
+.thread .dot.completed { background: var(--ok); }
+.thread .dot.blocked, .thread .dot.failed { background: var(--bad); }
+.thread .dot.needs_human { background: var(--human); }
+.thread .t-title { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thread .t-sub { grid-column: 2; font-size: 11.5px; color: var(--ink-3); }
+.rail-foot {
+  border-top: 1px solid var(--line); padding: 12px 16px; display: flex; align-items: center;
+  justify-content: space-between; font-size: 12px; color: var(--ink-3);
+}
+.health { display: flex; align-items: center; gap: 7px; }
+.health i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+.health.up i { background: var(--ok); }
+.health.down i { background: var(--bad); }
+.icon-btn {
+  border: 1px solid var(--line); background: transparent; border-radius: 8px;
+  width: 30px; height: 30px; display: grid; place-items: center; color: var(--ink-2);
+}
+.icon-btn:hover { border-color: var(--ink-3); color: var(--ink); }
+
+/* Chat */
+.chat { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.chat-head {
+  padding: 16px 32px; border-bottom: 1px solid var(--line); display: flex; align-items: center;
+  justify-content: space-between; gap: 16px; min-height: 64px;
+}
+.chat-head .who { font-size: 13px; color: var(--ink-2); }
+.chat-head .who b { color: var(--ink); font-weight: 600; }
+.chat-head .tid { font-size: 12px; color: var(--ink-3); }
+.banner {
+  display: none; margin: 12px 32px 0; padding: 10px 14px; border-radius: 10px;
+  background: var(--bad-soft); color: var(--bad); font-size: 13.5px;
+}
+.banner.show { display: block; }
+.banner code { font-family: var(--mono); font-size: 12.5px; }
+.scroll { flex: 1; overflow-y: auto; }
+.stream { max-width: 780px; margin: 0 auto; padding: 28px 32px 40px; }
+
+.empty { padding: 9vh 0 0; }
+.empty h2 { font: 500 30px/1.2 var(--serif); letter-spacing: -.015em; margin: 0 0 8px; }
+.empty p { color: var(--ink-2); margin: 0 0 26px; max-width: 520px; }
+.prompts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.prompt {
+  text-align: left; border: 1px solid var(--line); background: var(--panel); border-radius: 12px;
+  padding: 12px 14px; transition: border-color .15s, transform .15s;
+}
+.prompt:hover { border-color: var(--line-2); transform: translateY(-1px); }
+.prompt .p-tag { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; }
+.prompt .p-tag.maya { color: var(--maya); }
+.prompt .p-tag.webex { color: var(--webex); }
+.prompt .p-text { font-size: 13.5px; color: var(--ink); margin-top: 3px; }
+.prompt .p-as { font-size: 12px; color: var(--ink-3); margin-top: 6px; }
+
+.msg { margin: 0 0 26px; }
+.msg.user { display: flex; justify-content: flex-end; }
+.msg.user .bubble {
+  background: var(--raised); border: 1px solid var(--line); border-radius: 16px 16px 4px 16px;
+  padding: 10px 14px; max-width: 78%; white-space: pre-wrap; box-shadow: var(--shadow);
+}
+.agent-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.scope {
+  font-size: 11.5px; font-weight: 600; letter-spacing: .04em; padding: 2px 9px;
+  border-radius: 999px; background: var(--accent-soft); color: var(--accent);
+}
+.scope.maya { background: var(--maya-soft); color: var(--maya); }
+.scope.webex { background: var(--webex-soft); color: var(--webex); }
+.badge {
+  font-size: 11.5px; font-weight: 600; padding: 2px 9px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.badge.completed { background: var(--ok-soft); color: var(--ok); }
+.badge.pending { background: var(--wait-soft); color: var(--wait); }
+.badge.blocked, .badge.failed, .badge.error { background: var(--bad-soft); color: var(--bad); }
+.badge.needs_human { background: var(--human-soft); color: var(--human); }
+.trace {
+  margin-left: auto; font-size: 12.5px; color: var(--accent); text-decoration: none;
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 7px;
+}
+.trace:hover { background: var(--accent-soft); }
+.answer { color: var(--ink); }
+.answer p { margin: 0 0 10px; }
+.answer ul { margin: 0 0 10px; padding-left: 20px; }
+.answer li { margin: 0 0 4px; }
+.cite {
+  font-family: var(--mono); font-size: 11px; color: var(--ink-2); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; margin: 0 1px;
+  white-space: nowrap; vertical-align: 1px;
+}
+.cites { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
+.cites .cite { font-size: 11.5px; padding: 2px 7px; }
+.waiting {
+  margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--wait-soft);
+  color: var(--wait); font-size: 13px;
+}
+details.meta { margin-top: 10px; font-size: 12.5px; color: var(--ink-2); }
+details.meta summary {
+  cursor: pointer; color: var(--ink-3); list-style: none; display: inline-flex;
+  align-items: center; gap: 6px; user-select: none;
+}
+details.meta summary::-webkit-details-marker { display: none; }
+details.meta summary::before { content: "›"; display: inline-block; transition: transform .15s; }
+details.meta[open] summary::before { transform: rotate(90deg); }
+details.meta dl {
+  display: grid; grid-template-columns: 110px 1fr; gap: 5px 14px; margin: 10px 0 0;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+}
+details.meta dt { color: var(--ink-3); }
+details.meta dd { margin: 0; font-family: var(--mono); font-size: 12px; word-break: break-word; }
+.thinking { display: flex; align-items: center; gap: 10px; color: var(--ink-3); font-size: 13.5px; }
+.dots { display: inline-flex; gap: 4px; }
+.dots i {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  animation: pulse 1.2s infinite ease-in-out;
+}
+.dots i:nth-child(2) { animation-delay: .15s; }
+.dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes pulse { 0%, 80%, 100% { opacity: .25; transform: scale(.8); } 40% { opacity: 1; transform: scale(1); } }
+
+.composer { padding: 0 32px 22px; }
+.composer-inner {
+  max-width: 780px; margin: 0 auto; background: var(--raised); border: 1px solid var(--line-2);
+  border-radius: 16px; box-shadow: var(--shadow); display: flex; align-items: flex-end;
+  gap: 10px; padding: 10px 10px 10px 16px; transition: border-color .15s;
+}
+.composer-inner:focus-within { border-color: var(--accent); }
+.composer textarea {
+  flex: 1; border: 0; outline: none; resize: none; background: transparent;
+  max-height: 180px; min-height: 24px; padding: 4px 0; line-height: 1.5;
+}
+.send {
+  border: 0; background: var(--accent); color: var(--accent-ink); border-radius: 10px;
+  height: 36px; padding: 0 16px; font-weight: 600; transition: opacity .15s;
+}
+.send:disabled { opacity: .35; cursor: not-allowed; }
+.hint { max-width: 780px; margin: 8px auto 0; font-size: 11.5px; color: var(--ink-3); text-align: center; }
+
+/* Approvals */
+.approvals {
+  background: var(--panel); border-left: 1px solid var(--line); display: flex;
+  flex-direction: column; min-height: 0;
+}
+.ap-head { padding: 22px 20px 6px; display: flex; align-items: center; justify-content: space-between; }
+.ap-head h2 { margin: 0; font: 600 17px/1 var(--serif); }
+.ap-sub { padding: 0 20px 14px; font-size: 12.5px; color: var(--ink-3); }
+.ap-list { flex: 1; overflow-y: auto; padding: 0 14px 16px; }
+.ap {
+  background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+  margin-bottom: 10px; box-shadow: var(--shadow);
+}
+.ap-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ap-id { font-family: var(--mono); font-weight: 600; font-size: 13px; }
+.ap-type { font-size: 11px; color: var(--ink-3); letter-spacing: .04em; text-transform: uppercase; }
+.ap-body { font-size: 13px; color: var(--ink-2); margin: 6px 0 10px; }
+.ap-body b { color: var(--ink); font-weight: 600; }
+.ap-actions { display: flex; gap: 8px; }
+.ap-actions button {
+  flex: 1; border-radius: 8px; padding: 6px 0; font-size: 13px; font-weight: 600;
+  border: 1px solid var(--line-2); background: transparent;
+}
+.ap-actions .approve { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.ap-actions .reject:hover { border-color: var(--bad); color: var(--bad); }
+.ap-actions button:disabled { opacity: .4; cursor: wait; }
+.ap-empty { font-size: 13px; color: var(--ink-3); padding: 10px 6px; }
+.ap-note {
+  margin: 0 14px 16px; padding: 11px 13px; border-radius: 10px; background: var(--accent-soft);
+  color: var(--accent); font-size: 12.5px; display: none;
+}
+.ap-note.show { display: block; }
+.ap-note.err { background: var(--bad-soft); color: var(--bad); }
+
+@media (max-width: 1100px) {
+  .app { grid-template-columns: 240px minmax(0, 1fr); }
+  .approvals { display: none; }
+  .app.show-approvals .approvals {
+    display: flex; position: fixed; right: 0; top: 0; bottom: 0; width: 320px; z-index: 5;
+    box-shadow: var(--shadow);
+  }
+}
+.ap-toggle { display: none; }
+@media (max-width: 1100px) { .ap-toggle { display: inline-flex; } }
+@media (max-width: 720px) {
+  .app { grid-template-columns: 1fr; }
+  .rail { display: none; }
+  .stream, .chat-head, .composer { padding-left: 16px; padding-right: 16px; }
+  .banner { margin-left: 16px; margin-right: 16px; }
+  .prompts { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="rail">
+    <div class="brand"><h1>NovaOps</h1><span>Maya · Webex</span></div>
+    <div class="caller">
+      <p class="section-label">Talking as</p>
+      <div class="caller-card">
+        <select id="caller" aria-label="Caller"></select>
+        <div class="caller-meta" id="caller-meta">&nbsp;</div>
+      </div>
+    </div>
+    <button class="new-thread" id="new-thread">
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      New thread
+    </button>
+    <nav class="threads">
+      <p class="section-label">Threads</p>
+      <div id="threads"></div>
+    </nav>
+    <div class="rail-foot">
+      <span class="health" id="health"><i></i><span>Checking MCP…</span></span>
+      <button class="icon-btn" id="theme" title="Switch light or dark" aria-label="Switch light or dark">
+        <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 0 0 13z" fill="currentColor"/><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="chat">
+    <header class="chat-head">
+      <div>
+        <div class="who" id="who"></div>
+        <div class="tid mono" id="tid"></div>
+      </div>
+      <button class="icon-btn ap-toggle" id="ap-toggle" title="Approvals" aria-label="Approvals">
+        <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </header>
+    <div class="banner" id="banner"></div>
+    <div class="scroll" id="scroll"><div class="stream" id="stream"></div></div>
+    <div class="composer">
+      <form class="composer-inner" id="form">
+        <textarea id="input" rows="1" placeholder="Ask Maya about onboarding, or Webex about access…"></textarea>
+        <button class="send" id="send" type="submit" disabled>Send</button>
+      </form>
+      <div class="hint">Every message goes through <span class="mono">run_turn()</span> with the caller above. Approvals are decided in the panel, never in chat.</div>
+    </div>
+  </main>
+
+  <aside class="approvals" id="approvals">
+    <div class="ap-head">
+      <h2>Approvals</h2>
+      <button class="icon-btn" id="ap-refresh" title="Refresh" aria-label="Refresh approvals">
+        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2v3.5H10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+    <div class="ap-sub" id="ap-sub">Open approvals waiting on the selected caller.</div>
+    <div class="ap-list" id="ap-list"></div>
+    <div class="ap-note" id="ap-note"></div>
+  </aside>
+</div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const STORE = "novaops-chat";
+const PROMPTS = [
+  {scope: "maya", caller: "E010", text: "What's the NovaOps policy on using a personal laptop for work?"},
+  {scope: "webex", caller: "E010", text: "I joined Customer Success and need Webex access. Webex says my account is not licensed."},
+  {scope: "maya", caller: "E004", text: "Which of Maya Cohen's onboarding tasks are still open, and is anything blocking them?"},
+  {scope: "webex", caller: "E018", text: "Which people on my team currently hold a Webex seat?"},
+];
+const LABEL = /\[((?:db:[a-z_]+(?:#[A-Za-z0-9_-]+)?)|(?:[^\[\]\n]+?\.md(?:#[^\[\]\n]+)?))\]/g;
+
+const state = { callers: [], byId: {}, caller: null, threads: [], current: null, busy: false };
+
+/* Per-browser-session storage. It can be missing (private windows), so every access is guarded. */
+function load() {
+  try { return JSON.parse(sessionStorage.getItem(STORE)) || {}; } catch (e) { return {}; }
+}
+function save() {
+  try {
+    sessionStorage.setItem(STORE, JSON.stringify({threads: state.threads, current: state.current?.id}));
+  } catch (e) { /* storage unavailable: threads last for this page only */ }
+}
+function theme(next) {
+  if (next) { document.documentElement.dataset.theme = next; try { localStorage.setItem(STORE + "-theme", next); } catch (e) {} }
+}
+try { const t = localStorage.getItem(STORE + "-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {headers: {"Content-Type": "application/json"}, ...options});
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = typeof body.detail === "string" ? body.detail : `Request failed (${res.status}).`;
+    throw Object.assign(new Error(detail), {status: res.status});
+  }
+  return body;
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+}
+function inline(text) {
+  return esc(text)
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(LABEL, (_, l) => `<span class="cite">${l}</span>`);
+}
+function render(text) {
+  const out = []; let list = null;
+  for (const raw of String(text || "").split(/\n/)) {
+    const line = raw.trim();
+    const item = line.match(/^(?:[-*•]|\d+[.)])\s+(.*)$/);
+    if (item) { (list ||= []).push(`<li>${inline(item[1])}</li>`); continue; }
+    if (list) { out.push(`<ul>${list.join("")}</ul>`); list = null; }
+    if (line) out.push(`<p>${inline(line.replace(/^#+\s*/, ""))}</p>`);
+  }
+  if (list) out.push(`<ul>${list.join("")}</ul>`);
+  return out.join("");
+}
+
+function uuid() {
+  return crypto.randomUUID ? crypto.randomUUID()
+    : "t-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+}
+function newThread(callerId) {
+  const thread = {id: uuid(), caller: callerId, title: "New thread", status: null, turns: []};
+  state.threads.unshift(thread);
+  state.current = thread;
+  save();
+  return thread;
+}
+function selectThread(thread) {
+  state.current = thread;
+  if (state.caller !== thread.caller) { state.caller = thread.caller; $("ap-note").className = "ap-note"; $("caller").value = thread.caller; showCaller(); loadApprovals(); }
+  save(); drawThreads(); drawStream();
+}
+
+function showCaller() {
+  const c = state.byId[state.caller];
+  $("caller-meta").innerHTML = c
+    ? `${esc(c.role)} · <span class="mono">${esc(c.employee_id)}</span> · <span class="mono">${esc(c.user_group_id)}</span>`
+    : "&nbsp;";
+  $("who").innerHTML = c ? `Talking as <b>${esc(c.full_name)}</b> · ${esc(c.role)}` : "";
+  $("ap-sub").textContent = c ? `Open approvals waiting on ${c.full_name}.` : "";
+}
+
+function drawThreads() {
+  const box = $("threads");
+  if (!state.threads.length) { box.innerHTML = `<div class="t-sub" style="padding:4px 10px;color:var(--ink-3);font-size:12.5px">No threads yet.</div>`; return; }
+  box.innerHTML = "";
+  for (const t of state.threads) {
+    const c = state.byId[t.caller];
+    const b = document.createElement("button");
+    b.className = "thread" + (t === state.current ? " active" : "");
+    b.innerHTML = `<span class="dot ${esc(t.status || "")}"></span><span class="t-title">${esc(t.title)}</span>
+      <span class="t-sub">${esc(c ? c.full_name : t.caller)}${t.status === "pending" ? " · paused" : ""}</span>`;
+    b.onclick = () => selectThread(t);
+    box.appendChild(b);
+  }
+}
+
+function emptyState() {
+  const cards = PROMPTS.map((p, i) => {
+    const c = state.byId[p.caller];
+    return `<button class="prompt" data-i="${i}"><div class="p-tag ${p.scope}">${p.scope === "maya" ? "Maya · HR" : "Webex · IT"}</div>
+      <div class="p-text">${esc(p.text)}</div><div class="p-as">as ${esc(c ? c.full_name : p.caller)}</div></button>`;
+  }).join("");
+  return `<div class="empty"><h2>Ask the company brain.</h2>
+    <p>Maya answers onboarding and HR questions from NovaOps documents and records. Webex diagnoses access problems and files nothing without a recorded approval. Every answer cites its sources.</p>
+    <div class="prompts">${cards}</div></div>`;
+}
+
+function agentBlock(turn) {
+  if (turn.error) {
+    return `<div class="agent-row"><span class="badge error">error</span></div><div class="answer"><p>${esc(turn.error)}</p></div>`;
+  }
+  const o = turn.outcome;
+  const scope = o.scope ? `<span class="scope ${esc(o.scope)}">${o.scope === "maya" ? "Maya" : o.scope === "webex" ? "Webex" : esc(o.scope)}</span>` : "";
+  const trace = o.trace_url ? `<a class="trace" href="${esc(o.trace_url)}" target="_blank" rel="noopener">Langfuse trace ↗</a>` : "";
+  const cites = (o.citations || []).length
+    ? `<div class="cites">${o.citations.map((c) => `<span class="cite">${esc(c.replace(/^\[|\]$/g, ""))}</span>`).join("")}</div>` : "";
+  const waiting = o.status === "pending" && o.approval_id
+    ? `<div class="waiting">Paused on <span class="mono">${esc(o.approval_id)}</span>. Switch to its approver, decide in the Approvals panel, then send any message here to resume.</div>` : "";
+  const row = (k, v) => `<dt>${k}</dt><dd>${v && (Array.isArray(v) ? v.length : true) ? esc(Array.isArray(v) ? v.join(", ") : v) : "—"}</dd>`;
+  return `<div class="agent-row">${scope}<span class="badge ${esc(o.status)}">${esc(o.status.replace("_", " "))}</span>${trace}</div>
+    <div class="answer">${render(o.answer)}</div>${cites}${waiting}
+    <details class="meta"><summary>Details</summary><dl>
+      ${row("Scope", o.scope)}${row("Intent", o.intent)}${row("Tools called", o.tools_called)}
+      ${row("Sources", o.sources)}${row("Approval", o.approval_id)}${row("Approvals", o.approvals)}
+      ${row("Request id", o.request_id)}${row("Thread id", state.current.id)}
+    </dl></details>`;
+}
+
+function drawStream() {
+  const t = state.current;
+  $("tid").textContent = t ? `thread ${t.id}` : "";
+  const stream = $("stream");
+  if (!t || !t.turns.length) {
+    stream.innerHTML = emptyState();
+    stream.querySelectorAll(".prompt").forEach((b) => b.onclick = () => usePrompt(PROMPTS[+b.dataset.i]));
+  } else {
+    stream.innerHTML = t.turns.map((turn) =>
+      `<div class="msg user"><div class="bubble">${esc(turn.message)}</div></div>` +
+      (turn.outcome || turn.error ? `<div class="msg agent">${agentBlock(turn)}</div>`
+        : `<div class="msg agent"><div class="thinking"><span class="dots"><i></i><i></i><i></i></span><span id="elapsed">Working…</span></div></div>`)
+    ).join("");
+  }
+  $("scroll").scrollTop = $("scroll").scrollHeight;
+}
+
+function usePrompt(p) {
+  if (state.caller !== p.caller) setCaller(p.caller);
+  $("input").value = p.text; $("input").focus(); grow(); syncSend();
+}
+
+function setCaller(id) {
+  state.caller = id; $("caller").value = id;
+  const t = state.current;
+  // A thread keeps its caller for life: another caller gets a new thread.
+  if (!t || (t.turns.length && t.caller !== id)) {
+    const empty = state.threads.find((x) => x.caller === id && !x.turns.length);
+    if (empty) state.current = empty; else newThread(id);
+  }
+  else if (t && !t.turns.length) { t.caller = id; save(); }
+  $("ap-note").className = "ap-note";
+  showCaller(); drawThreads(); drawStream(); loadApprovals();
+}
+
+function syncSend() { $("send").disabled = state.busy || !$("input").value.trim(); }
+function grow() { const i = $("input"); i.style.height = "auto"; i.style.height = Math.min(i.scrollHeight, 180) + "px"; }
+
+async function send(message) {
+  const thread = state.current;
+  const turn = {message};
+  thread.turns.push(turn);
+  if (thread.turns.length === 1) thread.title = message.length > 48 ? message.slice(0, 46) + "…" : message;
+  state.busy = true; syncSend(); drawThreads(); drawStream();
+  const started = Date.now();
+  const timer = setInterval(() => { const e = $("elapsed"); if (e) e.textContent = `Working… ${Math.round((Date.now() - started) / 1000)}s`; }, 1000);
+  try {
+    turn.outcome = await api("/api/turn", {method: "POST", body: JSON.stringify({message, caller_id: thread.caller, thread_id: thread.id})});
+    thread.status = turn.outcome.status;
+  } catch (err) {
+    turn.error = err.message;
+    if (err.status === 503) checkHealth();
+  } finally {
+    clearInterval(timer);
+    state.busy = false; save(); syncSend(); drawThreads(); if (state.current === thread) drawStream();
+    loadApprovals();
+  }
+}
+
+async function loadApprovals() {
+  const list = $("ap-list");
+  if (!state.caller) return;
+  try {
+    const rows = await api(`/api/approvals?caller_id=${encodeURIComponent(state.caller)}`);
+    if (!rows.length) { list.innerHTML = `<div class="ap-empty">Nothing waiting on this caller.</div>`; return; }
+    list.innerHTML = rows.map((a) => `<div class="ap" data-id="${esc(a.approval_id)}">
+      <div class="ap-top"><span class="ap-id">${esc(a.approval_id)}</span><span class="ap-type">${esc(a.request_type.replace(/_/g, " "))}</span></div>
+      <div class="ap-body">${a.subject_name ? `<b>${esc(a.subject_name)}</b>` : ""}${a.system_name ? ` · ${esc(a.system_name)}` : ""}
+        <br><span class="mono">${esc(a.record_id)}</span> · ${esc(a.status)}</div>
+      <div class="ap-actions"><button class="approve" data-d="approved">Approve</button><button class="reject" data-d="rejected">Reject</button></div>
+    </div>`).join("");
+    list.querySelectorAll(".ap").forEach((card) => card.querySelectorAll("button").forEach((b) =>
+      b.onclick = () => decide(card.dataset.id, b.dataset.d, card)));
+  } catch (err) {
+    list.innerHTML = `<div class="ap-empty">${esc(err.message)}</div>`;
+  }
+}
+
+async function decide(approvalId, decision, card) {
+  card.querySelectorAll("button").forEach((b) => b.disabled = true);
+  const note = $("ap-note");
+  try {
+    await api(`/api/approvals/${encodeURIComponent(approvalId)}/decision`, {method: "POST", body: JSON.stringify({caller_id: state.caller, decision})});
+    note.className = "ap-note show";
+    note.textContent = `${approvalId} ${decision}. Open the paused thread and send any message to resume it.`;
+  } catch (err) {
+    note.className = "ap-note show err"; note.textContent = err.message;
+  }
+  loadApprovals();
+}
+
+async function checkHealth() {
+  const h = $("health"), banner = $("banner");
+  try {
+    const s = await api("/api/health");
+    h.className = "health " + (s.mcp ? "up" : "down");
+    h.lastElementChild.textContent = s.mcp ? `MCP ${s.mcp_address}` : "MCP unreachable";
+    banner.className = "banner" + (s.mcp ? "" : " show");
+    if (!s.mcp) banner.innerHTML = `The MCP server is not reachable at <code>${esc(s.mcp_address)}</code>. Start it with <code>python -m mcp_server</code>, or run <code>python -m web.demo</code>, which starts both.`;
+  } catch (err) {
+    h.className = "health down"; h.lastElementChild.textContent = "Web app unreachable";
+  }
+}
+
+async function init() {
+  state.callers = await api("/api/callers");
+  for (const c of state.callers) state.byId[c.employee_id] = c;
+  $("caller").innerHTML = state.callers.map((c) =>
+    `<option value="${esc(c.employee_id)}">${esc(c.full_name)}</option>`).join("");
+  const saved = load();
+  state.threads = (saved.threads || []).filter((t) => state.byId[t.caller]);
+  state.current = state.threads.find((t) => t.id === saved.current) || null;
+  // A turn that was running when the page closed has no answer to show.
+  state.threads.forEach((t) => t.turns = t.turns.filter((x) => x.outcome || x.error));
+  if (!state.current) newThread(state.byId.E010 ? "E010" : state.callers[0].employee_id);
+  state.caller = state.current.caller; $("caller").value = state.caller;
+  showCaller(); drawThreads(); drawStream(); loadApprovals(); checkHealth();
+  setInterval(checkHealth, 10000);
+}
+
+$("caller").onchange = (e) => setCaller(e.target.value);
+$("new-thread").onclick = () => { newThread(state.caller); drawThreads(); drawStream(); $("input").focus(); };
+$("ap-refresh").onclick = loadApprovals;
+$("ap-toggle").onclick = () => $("app").classList.toggle("show-approvals");
+$("theme").onclick = () => {
+  const dark = document.documentElement.dataset.theme
+    ? document.documentElement.dataset.theme === "dark"
+    : matchMedia("(prefers-color-scheme: dark)").matches;
+  theme(dark ? "light" : "dark");
+};
+$("input").addEventListener("input", () => { grow(); syncSend(); });
+$("input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("form").requestSubmit(); }
+});
+$("form").onsubmit = (e) => {
+  e.preventDefault();
+  const text = $("input").value.trim();
+  if (!text || state.busy) return;
+  $("input").value = ""; grow(); send(text);
+};
+init().catch((err) => { $("stream").innerHTML = `<div class="banner show">${esc(err.message)}</div>`; });
+</script>
+</body>
+</html>

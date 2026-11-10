@@ -6,8 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from mcp_server.context import CallerContext
-from scripts.reseed import reseed
+# Tests never send traces unless NOVAOPS_TEST_TRACING=true asks for it (then
+# tests/test_trace_url.py runs). This runs before any project import, so agent/config's
+# load_dotenv, which does not override, cannot turn tracing back on from .env.
+if os.environ.get("NOVAOPS_TEST_TRACING", "").strip().lower() != "true":
+    os.environ["LANGFUSE_TRACING_ENABLED"] = "false"
+
+from mcp_server.context import CallerContext  # noqa: E402
+from scripts.reseed import reseed  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 

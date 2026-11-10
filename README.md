@@ -59,6 +59,7 @@ the file. A claim without a file is not made.
 | The five heuristics added after live runs each have an off switch and record every firing in the trace | `agent/heuristics.py`, `evals/ablate.py`, `tests/test_observability.py` | done (task #6) |
 | Two LLM judges (citation quality, access overclaim) run as Langfuse-managed evaluators on `eval:baseline` and `eval:final` traces only | `evals/register_judges.py`, `evals/judge-iam-policy.json` | done (task #6) |
 | Measured numbers: S6 to S8 delta, retrieval hit rate, S9 turn 1, the `needs_human` citation split, heuristic ablations, Rachel before and after, S4 before and after | `evals/results/results.md`, `evals/results/README.md`, `evals/results/raw/` | done (task #6) |
+| Web chat (ungraded): the page passes caller id, the caller's group from the DB and thread id into `run_turn()`; approvals are decided in a panel through one function, never from chat; `web/` imports only `run_turn` and `record_approval_decision` from the workflow | `web/app.py`, `web/approvals.py`, `web/data.py`, `tests/test_web.py` | done (task #12, ungraded) |
 | Evaluation run and submission | `SUBMISSION.md` | planned (task #11) |
 
 ## Stack
@@ -85,7 +86,8 @@ python -m scripts.ingest              # 102 files, 7 collections; prints chunks 
 python -m mcp_server                  # MCP server on MCP_SERVER_URL (port 9880)
 python -m agent.ask "What's the NovaOps policy on using a personal laptop for work?" \
     --caller E010 --group UG_REGULAR --thread t1     # prints scope, visible tools and the trace URL
-python -m pytest -q                   # integration tests skip without AWS credentials
+python -m pytest -q                   # tracing off (tests/conftest.py); integration tests skip without AWS credentials
+python -m web.demo                    # MCP server + web chat on http://127.0.0.1:8790, tracing on (--reseed first if wanted)
 ```
 
 `agent.ask` calls `run_turn()`; there is no other way into the workflow.
@@ -104,6 +106,8 @@ python -m evals.register_judges --dry-run              # then without flags (pau
 python -m evals.report --units                         # evals/results/results.md
 python -m evals.usage                                  # Langfuse units this billing period
 ```
+
+The web chat (`web/`, ungraded) calls `run_turn()` too. Its approvals panel records a decision through `decide()` in `web/approvals.py`, which calls `record_approval_decision()`. Switching the chat to task #6's `agent.approvals.decide()`, which adds the `approval_decision` span, replaces that one call. `agent.approvals.decide()` also takes the paused thread's id as its Langfuse session id, and the panel would have to look that id up first. `python -m web` starts the chat alone (`WEB_HOST`, `WEB_PORT`).
 
 ## Starting code
 
@@ -167,6 +171,7 @@ Planned sources, from the workspace brief:
 | Session replay and checks | `lesson-10-context-engineering/code/evals/` |
 | Langfuse | `lesson-11-observability-and-evals/code/01-langfuse-setup/`, `02-instrument-agent/` |
 | Scoring and judges | `lesson-11-observability-and-evals/code/03-score-the-run/`, `04-llm-judge/` |
+| `web/` (`app.py`, `data.py`, `approvals.py`, `demo.py`, `static/index.html`) | none (new) | Task #12, ungraded. FastAPI over `run_turn()`. Spec §6.6 asks a UI to pass caller context into the same core functions; Lesson 14 keeps the HTTP layer apart from the runtime. |
 
 ## Decisions
 

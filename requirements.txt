@@ -21,3 +21,6 @@ tenacity==9.2.1
 pytest==9.1.1
 # The MCP boundary tests are async.
 pytest-asyncio==1.4.0
+# Web chat (task #12): one FastAPI app and its server. httpx comes with mcp and runs TestClient.
+fastapi==0.162.2
+uvicorn==0.54.0
