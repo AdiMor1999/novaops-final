@@ -10,7 +10,9 @@ worker then replays every golden session `--repeat` times through `evals.score -
 sessions`. Tracing is off: these runs go only to `evals/results/raw/`, never to Langfuse.
 The heuristics-on reference is the baseline replays (evals/results/raw/baseline-*.json).
 
-Workers run in parallel because they share nothing but Bedrock and OpenSearch.
+Workers run in parallel because they share nothing but Bedrock and OpenSearch. Each
+worker starts a new Python process per replay, so `--code` points them at a frozen copy
+of the commit under test.
 """
 
 import argparse
@@ -48,7 +50,7 @@ def worker_env(heuristic: str, port: int, scratch: Path) -> dict:
     return env
 
 
-def start(heuristic: str, port: int, repeat: int, logs: Path) -> subprocess.Popen:
+def start(heuristic: str, port: int, repeat: int, logs: Path, code: Path) -> subprocess.Popen:
     """One worker: a shell loop that starts the server, replays `repeat` times, stops."""
     scratch = Path(tempfile.mkdtemp(prefix=f"ablate-{heuristic}-"))
     env = worker_env(heuristic, port, scratch)
@@ -61,7 +63,7 @@ def start(heuristic: str, port: int, repeat: int, logs: Path) -> subprocess.Pope
             f"{py} -m evals.score --parts sessions --out {RAW / f'ablation-{heuristic}-{k}.json'}"
             for k in range(1, repeat + 1))
         + f"; kill $(cat {scratch / 'pid'})")
-    return subprocess.Popen(["/bin/sh", "-c", script], cwd=REPO, env=env,
+    return subprocess.Popen(["/bin/sh", "-c", script], cwd=code, env=env,
                             stdout=open(logs / f"{heuristic}.log", "w"),
                             stderr=subprocess.STDOUT)
 
@@ -71,13 +73,17 @@ def main() -> int:
     parser.add_argument("heuristics", nargs="*", default=list(NAMES))
     parser.add_argument("--repeat", type=int, default=3)
     parser.add_argument("--logs", default=str(RAW / "ablation-logs"))
+    parser.add_argument("--code", default=str(REPO),
+                        help="run the workers from this copy of the repo (e.g. `git archive "
+                             "HEAD` unpacked), so edits made meanwhile do not leak in. "
+                             "Settings come from this process's environment.")
     args = parser.parse_args()
     if unknown := sorted(set(args.heuristics) - set(NAMES)):
         parser.error(f"unknown heuristics {unknown}")
     RAW.mkdir(parents=True, exist_ok=True)
     logs = Path(args.logs)
     logs.mkdir(parents=True, exist_ok=True)
-    workers = {h: start(h, FIRST_PORT + i, args.repeat, logs)
+    workers = {h: start(h, FIRST_PORT + i, args.repeat, logs, Path(args.code))
                for i, h in enumerate(args.heuristics)}
     failed = 0
     for heuristic, proc in workers.items():
