@@ -54,7 +54,12 @@ turn is unstable, and its flip says nothing about the heuristic. Discounting it:
   the noisy sessions where the user types "rrachel stein". Minus 4 points.
 - `title_chunk_demotion` (13%, the most frequent): without it S8 turn 1 fails every run,
   the VPN-steps turn it was added for. Minus 3 points.
-- `citation_brace_repair` (3%): without it S7 turn 4 fails 2 of 3. No change overall.
+- `citation_brace_repair` (3% of session turns, and every Rachel run): no measurable
+  effect on the binding pass rate. With it off the rate is 90%, the same as the
+  baseline. S7 turn 4 failed 2 of 3 runs without it, but three runs of one turn is too
+  few to call that an effect. It is kept: it only rewrites braces to brackets and
+  splits packed labels, and every label is still checked against what tools returned.
+  Without it, such a draft costs a repair call or ends in `ParseFailed`.
 - `self_access_confirmation` never fires in the golden sessions: none has a first-person
   access request. It fires on all six Rachel runs (`rachel-*.json`). With it off
   (`raw/ablation-rachel-self_access_confirmation.json`, three untraced runs), the Rachel
@@ -104,10 +109,26 @@ fact through; it is left as found and reported, not tuned.
 
 ## Judges
 
-Scores on the baseline traces at the time of writing: `access_overclaim_v1` averages
-0.98 and `citation_quality_v1` 0.85. Both run on Amazon Nova Pro at temperature 0
-(checked on each judge's own generation in Langfuse). Langfuse runs the judges
-asynchronously, so a few may still have been arriving when these averages were read.
+Both judges run on Amazon Nova Pro at temperature 0 (checked on each judge's own
+generation in Langfuse). Final scores on the 315 baseline turns (295 session turns and
+20 single-turn cases):
+
+| Judge | Turns scored | Average |
+| --- | --- | --- |
+| `citation_quality_v1` | 301 of 315 | 0.870 |
+| `access_overclaim_v1` | 298 of 315 | 0.973 |
+
+The unscored turns failed and will not be scored: 14 for `citation_quality_v1`, 17 for
+`access_overclaim_v1`, and 3 of them miss both. They are not queued. Langfuse
+recorded 263 failed judge executions, every one "AI_APICallError: Too many requests":
+Bedrock throttled Nova Pro because the five replays ran in parallel and sent judge calls
+in bursts. Langfuse retried each execution and most turns were scored on a later attempt.
+The ones above gave up after their last retry. The last judge execution ran at 14:52
+UTC; nothing ran in the eleven minutes before this was checked. The missing turns are
+spread across S2 to S6 and three replays, not tied to one session. The averages cover
+the scored turns only. Each failed attempt is also a judge trace and observation, so
+the throttling cost Langfuse units (counted in the task total). Running the replays
+one after another, or with fewer workers, would avoid it in #11.
 
 ## Cost
 

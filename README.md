@@ -262,9 +262,17 @@ the root span) and on `TurnOutcome.heuristics`. How often each fires, and what c
 with it off over three full golden replays, is in `evals/results/results.md` ("Heuristics");
 `evals/results/README.md` reads it. In short: `needs_tools_override` is worth 6 points of
 binding pass rate (S2 turn 3, S9 turns 1 and 5 fail without it), `fuzzy_name_lookup` 4
-(S7 and S8's "rrachel stein"), `title_chunk_demotion` 3 (S8 turn 1),
-`citation_brace_repair` none overall (S7 turn 4), and `self_access_confirmation` fires on
-no golden turn but on every Rachel run, which fails its whole rubric without it.
+(S7 and S8's "rrachel stein"), `title_chunk_demotion` 3 (S8 turn 1), and
+`self_access_confirmation` fires on no golden turn but on every Rachel run, which fails
+its whole rubric without it.
+
+`citation_brace_repair` has no measurable effect. With it off, the binding pass rate over
+three replays is 90%, the same as with it on. One turn (S7 turn 4) failed 2 of 3 runs
+without it, but that is too few runs to call it an effect. It is kept anyway: it fires
+on 3% of session turns and on every Rachel run. It only rewrites `{`/`}` to brackets and
+splits packed labels, and every label is still checked against tool results. Without
+it, such a draft costs a repair call or ends in `ParseFailed`. That cost is not what the
+binding checks measure.
 
 | Heuristic | Where | What it does | Why it was added |
 | --- | --- | --- | --- |
@@ -285,4 +293,30 @@ checked on the judge's own generation).
 Langfuse reaches Bedrock through a dedicated IAM user that may only invoke Nova Pro
 (`evals/judge-iam-policy.json`); the project's main keys never go to Langfuse. Rules fire
 only on traces tagged `eval:baseline` or `eval:final`. One disagreement between a judge
-and a deterministic check is written up in `evals/results/README.md`.
+and a deterministic check is written up in `evals/results/README.md`. On the 315
+baseline turns, `citation_quality_v1` scored 301 (average 0.870) and `access_overclaim_v1`
+scored 298 (average 0.973). The rest failed because Bedrock throttled Nova Pro while five
+replays ran in parallel.
+
+## Known limitations
+
+Measured in task #6 and left in place, so the final evaluation (#11) runs on the code
+that was measured (agent-code hash `4be5448af0f4`). Neither was tuned against.
+
+- **Invented labels on turns with no tool call.** When a turn answers from the
+  conversation alone, Nova Lite sometimes ends a sentence with a bracketed label no tool
+  returned, such as `[citation]`, `[constraint]` or `[established facts]`, although the
+  prompt forbids exactly these. The citation check catches it, and the turn ends
+  `needs_human`. It is the largest single cause of `needs_human`: 17 of 31 such turns
+  over five baseline replays (S4 turns 1, 5 and 7 are typical).
+- **SIMPLE_004 never retrieves `it_kb/webex_login_issue.md`.** For "Webex support SLA",
+  retrieval returns the vendor agreement (with its "Support SLA" section) but ranks the
+  licence-assignment article and the cleanup memo above the login-issue article, in all
+  five runs. That case's hit rate is 0.50; overall, 80 of 85 expected documents come back.
+- **Two gaps in the citation check** (`agent/outcome.py`, `needs_citation`), found by the
+  judge comparison: a line ending in a colon counts as a heading and is not checked
+  (SIMPLE_005's false "Three SaaS contracts expire within the next 30 days:"), and an
+  instruction that restates a cited step counts as an uncited fact (S5 turn 1).
+- **Judge coverage under parallel load.** Running five replays at once made Bedrock
+  throttle Nova Pro, and 14 and 17 of 315 turns went unjudged. Run #11's replays one
+  after another.
