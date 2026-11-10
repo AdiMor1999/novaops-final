@@ -511,3 +511,375 @@ INFO:     127.0.0.1:53619 - "POST /mcp HTTP/1.1" 202 Accepted
 INFO:     127.0.0.1:53620 - "GET /mcp HTTP/1.1" 200 OK
 INFO:     127.0.0.1:53621 - "POST /mcp HTTP/1.1" 200 OK
 Processing request of type ListToolsRequest
+Terminating session: 61e7c13581c04cad92652c9e18429628
+INFO:     127.0.0.1:53652 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 36340508c4c34cb18c21c785b1a92f49
+INFO:     127.0.0.1:53653 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53654 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:53655 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53656 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:53677 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:53691 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:53692 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:53693 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+POST https://ri3koi987mnek2b6p0jd.aoss.us-east-1.on.aws:443/novaops-final-kb/_search [status:200 request:0.400s]
+INFO:     127.0.0.1:53706 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+POST https://ri3koi987mnek2b6p0jd.aoss.us-east-1.on.aws:443/novaops-final-kb/_search [status:200 request:0.438s]
+INFO:     127.0.0.1:53719 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:53720 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:53721 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: 36340508c4c34cb18c21c785b1a92f49
+INFO:     127.0.0.1:53743 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: f48dfa19a5074e04825a7b7c403c6946
+INFO:     127.0.0.1:53744 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53745 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:53746 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53748 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:53767 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+POST https://ri3koi987mnek2b6p0jd.aoss.us-east-1.on.aws:443/novaops-final-kb/_search [status:200 request:0.242s]
+Terminating session: f48dfa19a5074e04825a7b7c403c6946
+INFO:     127.0.0.1:53792 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 7cc22c3122704b66b72a1aea90367a63
+INFO:     127.0.0.1:53793 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53794 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:53795 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53796 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:53812 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: 7cc22c3122704b66b72a1aea90367a63
+INFO:     127.0.0.1:53822 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: c8893556d75c44e7bd2c8e75185662e7
+INFO:     127.0.0.1:53823 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53824 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:53825 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53826 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+Terminating session: c8893556d75c44e7bd2c8e75185662e7
+INFO:     127.0.0.1:53849 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 66d68324fcd249e5b7037cbe56acbd35
+INFO:     127.0.0.1:53850 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53851 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:53852 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53853 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:53884 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:53896 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:53899 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:53901 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:53907 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:53916 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:53927 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+POST https://ri3koi987mnek2b6p0jd.aoss.us-east-1.on.aws:443/novaops-final-kb/_search [status:200 request:0.343s]
+INFO:     127.0.0.1:53940 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+POST https://ri3koi987mnek2b6p0jd.aoss.us-east-1.on.aws:443/novaops-final-kb/_search [status:200 request:0.339s]
+INFO:     127.0.0.1:53945 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:53946 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: 66d68324fcd249e5b7037cbe56acbd35
+INFO:     127.0.0.1:53985 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 90d59763adeb412d84545e970db76134
+INFO:     127.0.0.1:53987 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53988 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:53989 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53990 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:54004 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+POST https://ri3koi987mnek2b6p0jd.aoss.us-east-1.on.aws:443/novaops-final-kb/_search [status:200 request:0.518s]
+Terminating session: 90d59763adeb412d84545e970db76134
+INFO:     127.0.0.1:54029 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 004d79a715444cdf98a40c986042233b
+INFO:     127.0.0.1:54030 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54031 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54032 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54033 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+Terminating session: 004d79a715444cdf98a40c986042233b
+INFO:     127.0.0.1:54042 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 6791a904f93747259def1cae498f2bf4
+INFO:     127.0.0.1:54043 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54044 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54045 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54046 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:54067 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: 6791a904f93747259def1cae498f2bf4
+INFO:     127.0.0.1:54091 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 1bd2d8eab0294d4b9f71f620af2746a5
+INFO:     127.0.0.1:54092 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54093 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54094 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54095 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:54132 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+POST https://ri3koi987mnek2b6p0jd.aoss.us-east-1.on.aws:443/novaops-final-kb/_search [status:200 request:0.420s]
+Terminating session: 1bd2d8eab0294d4b9f71f620af2746a5
+INFO:     127.0.0.1:54158 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: d38f60036df84b0daa5066350bc0626b
+INFO:     127.0.0.1:54159 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54160 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54161 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54162 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:54203 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: d38f60036df84b0daa5066350bc0626b
+INFO:     127.0.0.1:54212 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 9c481e4342de44a6947e3cc348d6e6d7
+INFO:     127.0.0.1:54216 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54217 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54218 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54219 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:54251 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: 9c481e4342de44a6947e3cc348d6e6d7
+INFO:     127.0.0.1:54260 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 13d80fe5d58a4b61abeda365b8e425c8
+INFO:     127.0.0.1:54261 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54262 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54263 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54264 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+Terminating session: 13d80fe5d58a4b61abeda365b8e425c8
+INFO:     127.0.0.1:54300 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 1ef8ec3cc2344227ba35fe8b35906d94
+INFO:     127.0.0.1:54301 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54302 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54303 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54304 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+Terminating session: 1ef8ec3cc2344227ba35fe8b35906d94
+INFO:     127.0.0.1:54323 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 11f49810bd9049eb9d1912453005a23d
+INFO:     127.0.0.1:54324 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54325 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54326 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54327 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+Terminating session: 11f49810bd9049eb9d1912453005a23d
+INFO:     127.0.0.1:54354 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: f28d5082203b458b9ae877484f53d505
+INFO:     127.0.0.1:54355 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54356 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54357 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54358 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:54391 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: f28d5082203b458b9ae877484f53d505
+INFO:     127.0.0.1:54417 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: b948ebb6d6d64722a0568e6bc4bd16dd
+INFO:     127.0.0.1:54418 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54419 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54420 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54421 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:54450 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:54453 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+POST https://ri3koi987mnek2b6p0jd.aoss.us-east-1.on.aws:443/novaops-final-kb/_search [status:200 request:0.354s]
+Terminating session: b948ebb6d6d64722a0568e6bc4bd16dd
+INFO:     127.0.0.1:54488 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 0c93ae335daf4e2385fddc462d553e37
+INFO:     127.0.0.1:54489 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54490 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54491 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54492 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:54521 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: 0c93ae335daf4e2385fddc462d553e37
+INFO:     127.0.0.1:54550 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: dfaeabc8ed08460c990c60227f7fee34
+INFO:     127.0.0.1:54551 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54552 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54553 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54554 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:54581 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:54590 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: dfaeabc8ed08460c990c60227f7fee34
+INFO:     127.0.0.1:54611 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: bbffc37dbb0e4008b8a304f5558d7c0c
+INFO:     127.0.0.1:54613 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54614 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54615 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54616 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:54638 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:54645 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: bbffc37dbb0e4008b8a304f5558d7c0c
+INFO:     127.0.0.1:54656 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: c89e25c0bda848389ac8074ccdd21861
+INFO:     127.0.0.1:54657 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54658 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54659 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54660 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:54706 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:54707 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+INFO:     127.0.0.1:54714 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: c89e25c0bda848389ac8074ccdd21861
+INFO:     127.0.0.1:54724 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 6e2e28a417ff44f68bb9a89cf01c5240
+INFO:     127.0.0.1:54725 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54726 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54727 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54728 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+Terminating session: 6e2e28a417ff44f68bb9a89cf01c5240
+INFO:     127.0.0.1:54753 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: c732c59c52ed425792e77fa8912d66f1
+INFO:     127.0.0.1:54754 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54755 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54756 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54757 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:54783 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: c732c59c52ed425792e77fa8912d66f1
+INFO:     127.0.0.1:54792 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 1c96bb3a58ff488cb7c15e3cc0308bf0
+INFO:     127.0.0.1:54793 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54794 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54795 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54796 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:54838 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+POST https://ri3koi987mnek2b6p0jd.aoss.us-east-1.on.aws:443/novaops-final-kb/_search [status:200 request:0.349s]
+Terminating session: 1c96bb3a58ff488cb7c15e3cc0308bf0
+INFO:     127.0.0.1:54883 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 9461c9f6d3f04e75a20ec5551fb7327a
+INFO:     127.0.0.1:54884 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54886 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54885 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54887 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:54893 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: 9461c9f6d3f04e75a20ec5551fb7327a
+INFO:     127.0.0.1:54894 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: cc62e8bfcaa44ea8af99d9b33c090704
+INFO:     127.0.0.1:54895 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54896 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54897 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54898 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:54918 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: cc62e8bfcaa44ea8af99d9b33c090704
+INFO:     127.0.0.1:54938 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 2ff26e864e3b46d2a6d1b5a26b2f96ea
+INFO:     127.0.0.1:54939 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54940 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54941 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54942 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+Terminating session: 2ff26e864e3b46d2a6d1b5a26b2f96ea
+INFO:     127.0.0.1:54977 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: b977c7372dbb4a088a9a86b0f3d2c86e
+INFO:     127.0.0.1:54978 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54979 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:54980 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54981 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55007 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: b977c7372dbb4a088a9a86b0f3d2c86e
+INFO:     127.0.0.1:55018 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 990db57440bb48898943d990d818a770
+INFO:     127.0.0.1:55019 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55020 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:55021 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55022 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55060 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: 990db57440bb48898943d990d818a770
+INFO:     127.0.0.1:55070 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: b8258430c4614205b5597268358efdc1
+INFO:     127.0.0.1:55071 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55072 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:55073 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55074 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+Terminating session: b8258430c4614205b5597268358efdc1
+INFO:     127.0.0.1:55105 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 18919010c9534f229cf15765cb12427c
+INFO:     127.0.0.1:55106 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55107 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:55108 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55109 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55126 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: 18919010c9534f229cf15765cb12427c
+INFO:     127.0.0.1:55140 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: 81f68d1fe4e847e1b9645d209835f154
+INFO:     127.0.0.1:55142 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55143 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:55144 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55145 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55177 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+Terminating session: 81f68d1fe4e847e1b9645d209835f154
+INFO:     127.0.0.1:55183 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: de6db705ed30418aa88a0154d158b7aa
+INFO:     127.0.0.1:55184 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55185 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:55186 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55187 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     127.0.0.1:55213 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type CallToolRequest
+POST https://ri3koi987mnek2b6p0jd.aoss.us-east-1.on.aws:443/novaops-final-kb/_search [status:200 request:0.425s]
+Terminating session: de6db705ed30418aa88a0154d158b7aa
+INFO:     127.0.0.1:55236 - "DELETE /mcp HTTP/1.1" 200 OK
+Created new transport with session ID: f3b4d327e7194207af33c32c1d7ba1e8
+INFO:     127.0.0.1:55237 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55238 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:55239 - "GET /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55240 - "POST /mcp HTTP/1.1" 200 OK
+Processing request of type ListToolsRequest
+INFO:     Shutting down
+INFO:     Waiting for connections to close. (CTRL+C to force quit)
+ERROR:    ASGI callable returned without completing response.
+INFO:     Waiting for application shutdown.
+StreamableHTTP session manager shutting down
+Terminating session: f3b4d327e7194207af33c32c1d7ba1e8
+INFO:     Application shutdown complete.
+INFO:     Finished server process [84604]

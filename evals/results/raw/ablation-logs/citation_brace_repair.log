@@ -72,3 +72,216 @@ FAIL t4          access_request       pending     tools=['check_software_subscri
 
 == S7-boundary-noisy
 ok   t1          policy_question      completed   tools=['search_knowledge_base']
+ok   t2          employee_lookup      completed   tools=['get_employee']
+ok   t3          other                completed   tools=[]
+FAIL t4          -                    failed      tools=[]
+       - missing required facts ['AR0|pending|filed']
+       - expected a tool call, made none
+       - go-ahead turn ended failed, not pending
+       - go-ahead turn requested [], not ['AP001', 'AP002']
+       - approvals not all reused: {}
+       - labels no tool returned ['[source.md#Section]', '[db:table#ID]', "[db:tickets#T001}', input_type=str]", "[db:approvals#AP001}', input_type=str]", "[webex_vendor_agreement....x Seat Limit Exception}', input_type=str]", "[webex_license_cleanup_m...x License Cleanup Memo}', input_type=str]", "[webex_license_assignmen...t-line Troubleshooting}', input_type=str]", "[webex_login_issue.md#Fi...t-line Troubleshooting}', input_type=str]", "[webex_vendor_agreement....Subscription Agreement}', input_type=str]", "[access_management_policy.md#Approval tiers}', input_type=str]"]
+
+== S8-boundary-heavy-noise
+ok   t1          policy_question      completed   tools=['search_knowledge_base']
+ok   t2          employee_lookup      completed   tools=['get_employee']
+ok   t3          access_request       completed   tools=[]
+ok   t4          access_request       pending     tools=['check_software_subscription', 'get_access_requests', 'get_approvals', 'get_employee', 'get_employee', 'get_policy', 'list_employee_tickets', 'search_knowledge_base', 'search_knowledge_base', 'request_approval', 'request_approval']
+
+== S9-maya-own-account
+ok   t1          policy_question      completed   tools=['search_hr_documents']
+ok   t2          onboarding_status    completed   tools=[]
+ok   t3          subscription_review  completed   tools=['list_onboarding_tasks', 'check_software_subscription', 'get_access_requests']
+FAIL t4          policy_question      needs_human tools=['search_knowledge_base']
+       - uncited sentences ['The search did not return the manager guide or any section on feedback in the first 90 days [search_knowledge_base].', 'The results cover access approval tiers, expense submission windows, offboarding knowledge transfer and equipment return, and security incident reporting, none of which address the requested topic [search_knowledge_base].', 'To answer the user’s question, you need to search the HR documents instead, where the manager playbook or related guidance is likely stored [search_knowledge_base].']
+       - labels no tool returned ['[search_knowledge_base]']
+ok   t5          equipment_request    completed   tools=['list_onboarding_tasks']
+
+== S1-quick-policy
+ok   t1          policy_question      completed   tools=['get_policy']
+ok   t2          policy_question      completed   tools=[]
+ok   t3          policy_question      completed   tools=[]
+ok   t4          policy_question      completed   tools=[]
+
+== S2-onboarding-maya
+ok   t1          employee_lookup      completed   tools=['get_employee']
+FAIL t2          -                    failed      tools=[]
+       - missing required facts ['Webex', 'Salesforce']
+       - expected a tool call, made none
+       - labels no tool returned ['[source.md#Section]', '[db:table#ID]', "[db:onboarding_tasks#OT003}', input_type=str]"]
+ok   t3          onboarding_status    completed   tools=['list_onboarding_tasks']
+ok   t4          ticket_status        completed   tools=['get_employee', 'list_employee_tickets']
+ok   t5          onboarding_status    completed   tools=['check_asset_inventory']
+FAIL t6          equipment_request    needs_human tools=['check_asset_inventory', 'check_asset_inventory']
+       - missing required facts ['monitor', 'headset']
+ok   t7          onboarding_status    completed   tools=[]
+FAIL t8          subscription_review  needs_human tools=['check_software_subscription']
+       - uncited sentences ['There is no Webex seat available for Maya Cohen.']
+ok   t9          policy_question      completed   tools=['search_knowledge_base']
+ok   t10         access_request       pending     tools=[]
+ok   t11         onboarding_status    completed   tools=['list_onboarding_tasks']
+ok   t12         onboarding_status    completed   tools=[]
+
+== S3-intent-shift
+ok   t1          subscription_review  completed   tools=['check_software_subscription']
+FAIL t2          ticket_status        completed   tools=['list_employee_tickets']
+       - missing required facts ['T001']
+ok   t3          subscription_review  completed   tools=[]
+ok   t4          employee_lookup      completed   tools=['get_employee']
+FAIL t5          ticket_status        completed   tools=['get_access_requests']
+       - missing required facts ['T004|waiting']
+ok   t6          policy_question      completed   tools=['get_policy', 'list_policies', 'search_knowledge_base']
+  + Exception Group Traceback (most recent call last):
+  |   File "<frozen runpy>", line 203, in _run_module_as_main
+  |   File "<frozen runpy>", line 88, in _run_code
+  |   File "/private/tmp/claude-501/-Users-adimor--daedalus-workspaces-novaops-worktrees-6-m5-observability-and-evals-claude-df22932a/df22932a-d1ec-4ac2-acc0-46c60256cbef/scratchpad/snap-after/evals/score.py", line 455, in <module>
+  |     sys.exit(main())
+  |              ~~~~^^
+  |   File "/private/tmp/claude-501/-Users-adimor--daedalus-workspaces-novaops-worktrees-6-m5-observability-and-evals-claude-df22932a/df22932a-d1ec-4ac2-acc0-46c60256cbef/scratchpad/snap-after/evals/score.py", line 445, in main
+  |     report = asyncio.run(run(args.parts, args.sessions, args.tag))
+  |   File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/runners.py", line 204, in run
+  |     return runner.run(main)
+  |            ~~~~~~~~~~^^^^^^
+  |   File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/runners.py", line 127, in run
+  |     return self._loop.run_until_complete(task)
+  |            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  |   File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+  |     return future.result()
+  |            ~~~~~~~~~~~~~^^
+  |   File "/private/tmp/claude-501/-Users-adimor--daedalus-workspaces-novaops-worktrees-6-m5-observability-and-evals-claude-df22932a/df22932a-d1ec-4ac2-acc0-46c60256cbef/scratchpad/snap-after/evals/score.py", line 326, in run
+  |     report[part] = await runners[part]()
+  |                    ^^^^^^^^^^^^^^^^^^^^^
+  |   File "/private/tmp/claude-501/-Users-adimor--daedalus-workspaces-novaops-worktrees-6-m5-observability-and-evals-claude-df22932a/df22932a-d1ec-4ac2-acc0-46c60256cbef/scratchpad/snap-after/evals/score.py", line 219, in run_sessions
+  |     outcome = await run_turn(turn["user"], caller_id=caller_id, user_group=user_group,
+  |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |                              thread_id=thread_id, request_id=f"{prefix}-t{turn['n']}")
+  |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |   File "/private/tmp/claude-501/-Users-adimor--daedalus-workspaces-novaops-worktrees-6-m5-observability-and-evals-claude-df22932a/df22932a-d1ec-4ac2-acc0-46c60256cbef/scratchpad/snap-after/agent/run.py", line 136, in run_turn
+  |     async with mcp_session() as session:
+  |                ~~~~~~~~~~~^^
+  |   File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 235, in __aexit__
+  |     await self.gen.athrow(value)
+  |   File "/private/tmp/claude-501/-Users-adimor--daedalus-workspaces-novaops-worktrees-6-m5-observability-and-evals-claude-df22932a/df22932a-d1ec-4ac2-acc0-46c60256cbef/scratchpad/snap-after/agent/mcp_tools.py", line 44, in mcp_session
+  |     async with create_session(connection) as session:
+  |                ~~~~~~~~~~~~~~^^^^^^^^^^^^
+  |   File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 235, in __aexit__
+  |     await self.gen.athrow(value)
+  |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/langchain_mcp_adapters/sessions.py", line 455, in create_session
+  |     async with _create_streamable_http_session(**params) as session:
+  |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  |   File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 235, in __aexit__
+  |     await self.gen.athrow(value)
+  |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/langchain_mcp_adapters/sessions.py", line 360, in _create_streamable_http_session
+  |     streamable_http_client(
+  |     ~~~~~~~~~~~~~~~~~~~~~~^
+  |         url,
+  |         ^^^^
+  |         http_client=client,
+  |         ^^^^^^^^^^^^^^^^^^^
+  |         terminate_on_close=terminate_on_close,
+  |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |     ) as (read, write, _),
+  |     ^
+  |   File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 235, in __aexit__
+  |     await self.gen.athrow(value)
+  |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/mcp/client/streamable_http.py", line 672, in streamable_http_client
+  |     async with anyio.create_task_group() as tg:
+  |                ~~~~~~~~~~~~~~~~~~~~~~~^^
+  |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/anyio/_backends/_asyncio.py", line 847, in __aexit__
+  |     raise BaseExceptionGroup(
+  |         "unhandled errors in a TaskGroup", self._exceptions
+  |     ) from None
+  | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+  +-+---------------- 1 ----------------
+    | Traceback (most recent call last):
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpx/_transports/default.py", line 101, in map_httpcore_exceptions
+    |     yield
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpx/_transports/default.py", line 394, in handle_async_request
+    |     resp = await self._pool.handle_async_request(req)
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpcore/_async/connection_pool.py", line 256, in handle_async_request
+    |     raise exc from None
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpcore/_async/connection_pool.py", line 236, in handle_async_request
+    |     response = await connection.handle_async_request(
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |         pool_request.request
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |     )
+    |     ^
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpcore/_async/connection.py", line 101, in handle_async_request
+    |     raise exc
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpcore/_async/connection.py", line 78, in handle_async_request
+    |     stream = await self._connect(request)
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpcore/_async/connection.py", line 124, in _connect
+    |     stream = await self._network_backend.connect_tcp(**kwargs)
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpcore/_backends/auto.py", line 31, in connect_tcp
+    |     return await self._backend.connect_tcp(
+    |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ...<5 lines>...
+    |     )
+    |     ^
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpcore/_backends/anyio.py", line 113, in connect_tcp
+    |     with map_exceptions(exc_map):
+    |          ~~~~~~~~~~~~~~^^^^^^^^^
+    |   File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    |     self.gen.throw(value)
+    |     ~~~~~~~~~~~~~~^^^^^^^
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpcore/_exceptions.py", line 14, in map_exceptions
+    |     raise to_exc(exc) from exc
+    | httpcore.ConnectError: All connection attempts failed
+    | 
+    | The above exception was the direct cause of the following exception:
+    | 
+    | Traceback (most recent call last):
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/anyio/_core/_tasks.py", line 327, in _run_coro
+    |     retval = await self._coro
+    |              ^^^^^^^^^^^^^^^^
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/mcp/client/streamable_http.py", line 583, in handle_request_async
+    |     await self._handle_post_request(ctx)
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/mcp/client/streamable_http.py", line 361, in _handle_post_request
+    |     async with stream_within_origin(
+    |                ~~~~~~~~~~~~~~~~~~~~^
+    |         ctx.client,
+    |         ^^^^^^^^^^^
+    |     ...<3 lines>...
+    |         headers=headers,
+    |         ^^^^^^^^^^^^^^^^
+    |     ) as response:
+    |     ^
+    |   File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 214, in __aenter__
+    |     return await anext(self.gen)
+    |            ^^^^^^^^^^^^^^^^^^^^^
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/mcp/shared/_httpx_utils.py", line 132, in stream_within_origin
+    |     response = await client.send(request, stream=True, follow_redirects=False)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpx/_client.py", line 1629, in send
+    |     response = await self._send_handling_auth(
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ...<4 lines>...
+    |     )
+    |     ^
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpx/_client.py", line 1657, in _send_handling_auth
+    |     response = await self._send_handling_redirects(
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |     ...<3 lines>...
+    |     )
+    |     ^
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpx/_client.py", line 1694, in _send_handling_redirects
+    |     response = await self._send_single_request(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpx/_client.py", line 1730, in _send_single_request
+    |     response = await transport.handle_async_request(request)
+    |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpx/_transports/default.py", line 393, in handle_async_request
+    |     with map_httpcore_exceptions():
+    |          ~~~~~~~~~~~~~~~~~~~~~~~^^
+    |   File "/opt/homebrew/Cellar/python@3.14/3.14.5/Frameworks/Python.framework/Versions/3.14/lib/python3.14/contextlib.py", line 162, in __exit__
+    |     self.gen.throw(value)
+    |     ~~~~~~~~~~~~~~^^^^^^^
+    |   File "/Users/adimor/.daedalus/workspaces/novaops/.venv/lib/python3.14/site-packages/httpx/_transports/default.py", line 118, in map_httpcore_exceptions
+    |     raise mapped_exc(message) from exc
+    | httpx.ConnectError: All connection attempts failed
+    +------------------------------------
+/bin/sh: line 0: kill: (84607) - No such process

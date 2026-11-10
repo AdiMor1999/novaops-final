@@ -50,21 +50,23 @@ def worker_env(heuristic: str, port: int, scratch: Path) -> dict:
     return env
 
 
-def start(heuristic: str, port: int, repeat: int, logs: Path, code: Path) -> subprocess.Popen:
-    """One worker: a shell loop that starts the server, replays `repeat` times, stops."""
+def start(heuristic: str, port: int, replays: range, logs: Path, code: Path) -> subprocess.Popen:
+    """One worker: for each replay, start the server, replay every session, stop the
+    server. A server per replay means one lost server costs one replay, not the rest."""
     scratch = Path(tempfile.mkdtemp(prefix=f"ablate-{heuristic}-"))
     env = worker_env(heuristic, port, scratch)
     py = sys.executable
-    script = (
-        f"{py} -m scripts.reseed >/dev/null && "
-        f"({py} -m mcp_server > {logs / f'{heuristic}-server.log'} 2>&1 & echo $! > {scratch / 'pid'}) && "
-        f"{py} -c 'from evals.ablate import wait_for_port; wait_for_port({port})' && "
-        + " && ".join(
-            f"{py} -m evals.score --parts sessions --out {RAW / f'ablation-{heuristic}-{k}.json'}"
-            for k in range(1, repeat + 1))
-        + f"; kill $(cat {scratch / 'pid'})")
-    return subprocess.Popen(["/bin/sh", "-c", script], cwd=code, env=env,
-                            stdout=open(logs / f"{heuristic}.log", "w"),
+    server_log = logs / f"{heuristic}-server.log"
+    steps = [f"{py} -m scripts.reseed >/dev/null"]
+    for k in replays:
+        steps.append(
+            f"({py} -m mcp_server >> {server_log} 2>&1 & echo $! > {scratch / 'pid'}) && "
+            f"{py} -c 'from evals.ablate import wait_for_port; wait_for_port({port})' && "
+            f"{py} -m evals.score --parts sessions "
+            f"--out {RAW / f'ablation-{heuristic}-{k}.json'}; "
+            f"kill $(cat {scratch / 'pid'}); sleep 2")
+    return subprocess.Popen(["/bin/sh", "-c", " && ".join(steps)], cwd=code, env=env,
+                            stdout=open(logs / f"{heuristic}.log", "a"),
                             stderr=subprocess.STDOUT)
 
 
@@ -72,6 +74,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("heuristics", nargs="*", default=list(NAMES))
     parser.add_argument("--repeat", type=int, default=3)
+    parser.add_argument("--first", type=int, default=1,
+                        help="number of the first replay, to continue an interrupted run")
     parser.add_argument("--logs", default=str(RAW / "ablation-logs"))
     parser.add_argument("--code", default=str(REPO),
                         help="run the workers from this copy of the repo (e.g. `git archive "
@@ -83,7 +87,8 @@ def main() -> int:
     RAW.mkdir(parents=True, exist_ok=True)
     logs = Path(args.logs)
     logs.mkdir(parents=True, exist_ok=True)
-    workers = {h: start(h, FIRST_PORT + i, args.repeat, logs, Path(args.code))
+    replays = range(args.first, args.first + args.repeat)
+    workers = {h: start(h, FIRST_PORT + i, replays, logs, Path(args.code))
                for i, h in enumerate(args.heuristics)}
     failed = 0
     for heuristic, proc in workers.items():
