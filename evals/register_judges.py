@@ -4,7 +4,11 @@
     python -m evals.register_judges              # register; rules start PAUSED
     python -m evals.register_judges --enable     # register, or switch existing rules on
     python -m evals.register_judges --delete     # remove both judges and their rules
-    python -m evals.register_judges --test       # one judgement on a stubbed turn, then clean up
+    python -m evals.register_judges --test [--rubric citation_quality]   # one judgement, then clean up
+
+Pass `--provider bedrock-judge` for an organization-level LLM connection. The v2 API sets
+no model parameters: temperature 0 is set on each evaluator in the Langfuse UI, and
+`--test` shows it on the judge's own generation.
 
 The judges run on Langfuse's servers, through the project's LLM connection to Amazon
 Bedrock (Nova Pro, `JUDGE_MODEL_ID`). That connection uses a dedicated IAM user whose
@@ -251,7 +255,7 @@ def delete(rubrics=tuple(RUBRICS)) -> None:
             print(f"[deleted] evaluator {name}")
 
 
-def test() -> int:
+def test(rubric: str = "access_overclaim") -> int:
     """One judgement through the connection. A temporary rule fires only on
     `eval:judge-test`; one stubbed turn carries that tag; the access judge's score must
     appear on it with a reason. The rule is removed afterwards; the evaluator stays.
@@ -262,7 +266,6 @@ def test() -> int:
     from langfuse import propagate_attributes
     from evals import durability
     from scripts.reseed import reseed
-    rubric = "access_overclaim"
     model_config = connection()
     evaluator = _named(_api().evaluators.list, judge_name(rubric)) \
         or create_evaluator(rubric, model_config)
@@ -301,6 +304,8 @@ def main() -> int:
     parser.add_argument("--delete", action="store_true")
     parser.add_argument("--test", action="store_true")
     parser.add_argument("--provider", help="LLM connection name, e.g. bedrock-judge")
+    parser.add_argument("--rubric", choices=sorted(RUBRICS), default="access_overclaim",
+                        help="the judge --test runs")
     args = parser.parse_args()
     global PROVIDER
     PROVIDER = args.provider
@@ -313,7 +318,7 @@ def main() -> int:
         delete()
         return 0
     if args.test:
-        return test()
+        return test(args.rubric)
     register(args.enable)
     return 0
 
