@@ -19,3 +19,36 @@ FAIL t8          subscription_review  needs_human tools=['check_software_subscri
        - uncited sentences ['There is no Webex seat available for Maya Cohen.']
 ok   t9          policy_question      completed   tools=['search_knowledge_base']
 ok   t10         access_request       pending     tools=[]
+ok   t11         onboarding_status    completed   tools=['list_onboarding_tasks']
+ok   t12         onboarding_status    completed   tools=[]
+
+== S3-intent-shift
+ok   t1          subscription_review  completed   tools=['check_software_subscription']
+FAIL t2          ticket_status        completed   tools=['list_employee_tickets']
+       - missing required facts ['T001']
+ok   t3          subscription_review  completed   tools=[]
+ok   t4          employee_lookup      completed   tools=['get_employee']
+ok   t5          ticket_status        completed   tools=['get_access_requests']
+ok   t6          policy_question      completed   tools=['search_knowledge_base']
+ok   t7          policy_question      completed   tools=['search_hr_documents']
+FAIL t8          employee_lookup      completed   tools=[]
+       - missing required facts ['Rachel']
+ok   t9          onboarding_status    needs_human tools=[]
+
+== S4-constraint-carry
+FAIL t1          other                needs_human tools=[]
+       - labels no tool returned ['[citation]']
+ok   t2          subscription_review  completed   tools=['check_software_subscription']
+ok   t3          subscription_review  completed   tools=['check_software_subscription']
+ok   t4          subscription_review  completed   tools=['check_software_subscription']
+FAIL t5          policy_question      needs_human tools=[]
+       - labels no tool returned ['[citation]']
+FAIL t6          subscription_review  needs_human tools=['check_software_subscription']
+       - uncited sentences ["Say 'proceed' if you want me to file the request for Finance sign-off."]
+FAIL t7          other                needs_human tools=[]
+       - labels no tool returned ['[constraint]']
+ok   t8          access_request       pending     tools=['get_employee', 'get_access_requests', 'get_approvals', 'check_software_subscription', 'list_employee_tickets', 'search_knowledge_base', 'search_knowledge_base', 'request_approval', 'request_approval']
+ok   t9          subscription_review  completed   tools=[]
+
+== S5-noisy-inbox
+ok   t1          access_request       completed   tools=['get_employee', 'list_employee_tickets', 'search_knowledge_base']

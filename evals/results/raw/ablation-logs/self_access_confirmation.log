@@ -21,3 +21,29 @@ ok   t11         onboarding_status    completed   tools=['list_onboarding_tasks'
 ok   t12         onboarding_status    completed   tools=[]
 
 == S3-intent-shift
+ok   t1          subscription_review  completed   tools=['check_software_subscription']
+FAIL t2          ticket_status        completed   tools=['list_employee_tickets']
+       - missing required facts ['T001']
+ok   t3          subscription_review  completed   tools=[]
+ok   t4          employee_lookup      completed   tools=['get_employee']
+ok   t5          ticket_status        completed   tools=['get_access_requests']
+ok   t6          policy_question      completed   tools=['get_policy', 'list_policies', 'search_knowledge_base']
+ok   t7          onboarding_status    completed   tools=['search_hr_documents']
+FAIL t8          employee_lookup      completed   tools=[]
+       - missing required facts ['Rachel']
+ok   t9          onboarding_status    needs_human tools=[]
+
+== S4-constraint-carry
+FAIL t1          other                needs_human tools=[]
+       - labels no tool returned ['[citation]']
+ok   t2          subscription_review  completed   tools=['check_software_subscription']
+ok   t3          subscription_review  completed   tools=['check_software_subscription']
+ok   t4          subscription_review  completed   tools=['check_software_subscription']
+ok   t5          subscription_review  completed   tools=[]
+ok   t6          subscription_review  completed   tools=['check_software_subscription']
+ok   t7          other                completed   tools=[]
+ok   t8          access_request       pending     tools=['get_employee', 'get_access_requests', 'check_software_subscription', 'list_employee_tickets', 'search_knowledge_base', 'search_knowledge_base', 'get_approvals', 'request_approval', 'request_approval']
+ok   t9          subscription_review  completed   tools=[]
+
+== S5-noisy-inbox
+ok   t1          access_request       completed   tools=['get_employee', 'list_employee_tickets', 'search_knowledge_base']
