@@ -52,3 +52,25 @@ ok   t9          subscription_review  completed   tools=[]
 
 == S5-noisy-inbox
 ok   t1          access_request       completed   tools=['get_employee', 'list_employee_tickets', 'search_knowledge_base']
+ok   t2          policy_question      completed   tools=['search_knowledge_base']
+ok   t3          policy_question      completed   tools=['search_knowledge_base']
+ok   t4          other                completed   tools=[]
+FAIL t5          onboarding_status    completed   tools=[]
+       - expected a tool call, made none
+FAIL t6          other                completed   tools=[]
+       - missing required facts ['which|clarify|mean|specify|not sure']
+ok   t7          policy_question      completed   tools=['get_policy']
+ok   t8          ticket_status        completed   tools=[]
+
+== S6-boundary-clean
+FAIL t1          policy_question      completed   tools=['search_knowledge_base']
+       - missing required facts ['device|trust']
+ok   t2          employee_lookup      completed   tools=['get_employee']
+FAIL t3          access_request       needs_human tools=[]
+       - labels no tool returned ['[systems_allowed_by_role]']
+ok   t4          access_request       pending     tools=['check_software_subscription', 'list_employee_tickets', 'get_access_requests', 'search_knowledge_base', 'search_knowledge_base', 'get_approvals', 'request_approval', 'request_approval']
+
+== S7-boundary-noisy
+ok   t1          policy_question      completed   tools=['search_knowledge_base']
+ok   t2          employee_lookup      completed   tools=['get_employee']
+ok   t3          other                completed   tools=[]
