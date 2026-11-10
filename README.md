@@ -86,7 +86,7 @@ python -m scripts.ingest              # 102 files, 7 collections; prints chunks 
 python -m mcp_server                  # MCP server on MCP_SERVER_URL (port 9880)
 python -m agent.ask "What's the NovaOps policy on using a personal laptop for work?" \
     --caller E010 --group UG_REGULAR --thread t1     # prints scope, visible tools and the trace URL
-python -m pytest -q                   # integration tests skip without AWS credentials
+python -m pytest -q                   # tracing off (tests/conftest.py); integration tests skip without AWS credentials
 python -m web.demo                    # MCP server + web chat on http://127.0.0.1:8790, tracing on (--reseed first if wanted)
 ```
 
