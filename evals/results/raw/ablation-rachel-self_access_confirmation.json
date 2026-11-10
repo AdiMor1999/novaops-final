@@ -1,0 +1,396 @@
+[
+  {
+    "case": "rachel",
+    "status": "completed",
+    "checks": {
+      "must_include": {
+        "employee is eligible for Webex": false,
+        "subscription is over seat limit": false,
+        "contract is close to renewal": false,
+        "do not claim access granted": false,
+        "reuse existing ticket T001 and access request AR001": false,
+        "durable approval for expansion or renewal": false
+      },
+      "must_not_include": {
+        "access already granted": true,
+        "only a password reset": true,
+        "no approval needed": true,
+        "a duplicate ticket or access request was created": true
+      },
+      "expected_documents": {
+        "documents/contracts/webex_vendor_agreement.md": false,
+        "documents/it_kb/webex_license_assignment.md": false,
+        "documents/it_kb/webex_login_issue.md": false,
+        "documents/policies/access_management_policy.md": false,
+        "documents/internal_memos/webex_license_cleanup_memo.md": false
+      },
+      "document_citations": {
+        "a next step gives an option from a document": false
+      },
+      "rows": {
+        "no ticket, access request or approval was created": true
+      },
+      "run": {
+        "ended pending": false
+      }
+    },
+    "failed": [
+      "must_include: employee is eligible for Webex",
+      "must_include: subscription is over seat limit",
+      "must_include: contract is close to renewal",
+      "must_include: do not claim access granted",
+      "must_include: reuse existing ticket T001 and access request AR001",
+      "must_include: durable approval for expansion or renewal",
+      "expected_documents: documents/contracts/webex_vendor_agreement.md",
+      "expected_documents: documents/it_kb/webex_license_assignment.md",
+      "expected_documents: documents/it_kb/webex_login_issue.md",
+      "expected_documents: documents/policies/access_management_policy.md",
+      "expected_documents: documents/internal_memos/webex_license_cleanup_memo.md",
+      "document_citations: a next step gives an option from a document",
+      "run: ended pending"
+    ],
+    "outcome": {
+      "answer": "Your access request for Webex (AR001) is blocked because the current subscription has 42 active seats while the contract allows only 40 [db:software_subscriptions#SUB001][db:access_requests#AR001]. Approval from IT Manager Amir Haddad (E006) is needed to plan a subscription expansion, and Finance Controller Tom Baker (E011) must approve the cost [db:approvals#AP001][db:approvals#AP002][db:employees#E006][db:employees#E011]. The subscription renews on July 20, 2026, in 19 days [db:software_subscriptions#SUB001].",
+      "citations": [
+        "[db:software_subscriptions#SUB001]",
+        "[db:access_requests#AR001]",
+        "[db:approvals#AP001]",
+        "[db:approvals#AP002]",
+        "[db:employees#E006]",
+        "[db:employees#E011]"
+      ],
+      "status": "completed",
+      "request_id": "webex-rachel-c454e0",
+      "trace_id": null,
+      "trace_url": null,
+      "scope": "webex",
+      "intent": "access_request",
+      "visible_tools": [
+        "get_employee",
+        "check_software_subscription",
+        "get_access_requests",
+        "get_approvals",
+        "list_employee_tickets",
+        "search_knowledge_base",
+        "list_policies",
+        "get_policy"
+      ],
+      "tools_called": [
+        "check_software_subscription",
+        "get_access_requests",
+        "get_approvals",
+        "get_employee",
+        "get_employee",
+        "get_employee"
+      ],
+      "tool_calls": [
+        {
+          "name": "check_software_subscription",
+          "args": {
+            "software": "Webex"
+          }
+        },
+        {
+          "name": "get_access_requests",
+          "args": {
+            "employee_id": "E010"
+          }
+        },
+        {
+          "name": "get_approvals",
+          "args": {
+            "record_id": "AR001"
+          }
+        },
+        {
+          "name": "get_employee",
+          "args": {
+            "query": "E018"
+          }
+        },
+        {
+          "name": "get_employee",
+          "args": {
+            "query": "E006"
+          }
+        },
+        {
+          "name": "get_employee",
+          "args": {
+            "query": "E011"
+          }
+        }
+      ],
+      "sources": [],
+      "approval_id": null,
+      "approvals": [],
+      "checklist": null,
+      "access_decision": null,
+      "handoff": null,
+      "heuristics": []
+    }
+  },
+  {
+    "case": "rachel",
+    "status": "completed",
+    "checks": {
+      "must_include": {
+        "employee is eligible for Webex": false,
+        "subscription is over seat limit": false,
+        "contract is close to renewal": false,
+        "do not claim access granted": false,
+        "reuse existing ticket T001 and access request AR001": false,
+        "durable approval for expansion or renewal": false
+      },
+      "must_not_include": {
+        "access already granted": true,
+        "only a password reset": true,
+        "no approval needed": true,
+        "a duplicate ticket or access request was created": true
+      },
+      "expected_documents": {
+        "documents/contracts/webex_vendor_agreement.md": false,
+        "documents/it_kb/webex_license_assignment.md": false,
+        "documents/it_kb/webex_login_issue.md": false,
+        "documents/policies/access_management_policy.md": false,
+        "documents/internal_memos/webex_license_cleanup_memo.md": false
+      },
+      "document_citations": {
+        "a next step gives an option from a document": false
+      },
+      "rows": {
+        "no ticket, access request or approval was created": true
+      },
+      "run": {
+        "ended pending": false
+      }
+    },
+    "failed": [
+      "must_include: employee is eligible for Webex",
+      "must_include: subscription is over seat limit",
+      "must_include: contract is close to renewal",
+      "must_include: do not claim access granted",
+      "must_include: reuse existing ticket T001 and access request AR001",
+      "must_include: durable approval for expansion or renewal",
+      "expected_documents: documents/contracts/webex_vendor_agreement.md",
+      "expected_documents: documents/it_kb/webex_license_assignment.md",
+      "expected_documents: documents/it_kb/webex_login_issue.md",
+      "expected_documents: documents/policies/access_management_policy.md",
+      "expected_documents: documents/internal_memos/webex_license_cleanup_memo.md",
+      "document_citations: a next step gives an option from a document",
+      "run: ended pending"
+    ],
+    "outcome": {
+      "answer": "Your access request for Webex is blocked because the current subscription has 42 active seats while the contract allows only 40 [db:software_subscriptions#SUB001][db:access_requests#AR001]. Approval from IT Manager Amir Haddad is needed to plan a subscription expansion, and Finance Controller Tom Baker must approve the cost [db:approvals#AP001][db:approvals#AP002][db:employees#E006][db:employees#E011]. The approver for your request, Yael Romano, can proceed once these approvals are in place [db:access_requests#AR001][db:employees#E018].",
+      "citations": [
+        "[db:software_subscriptions#SUB001]",
+        "[db:access_requests#AR001]",
+        "[db:approvals#AP001]",
+        "[db:approvals#AP002]",
+        "[db:employees#E006]",
+        "[db:employees#E011]",
+        "[db:employees#E018]"
+      ],
+      "status": "completed",
+      "request_id": "webex-rachel-d1567a",
+      "trace_id": null,
+      "trace_url": null,
+      "scope": "webex",
+      "intent": "access_request",
+      "visible_tools": [
+        "get_employee",
+        "check_software_subscription",
+        "get_access_requests",
+        "get_approvals",
+        "list_employee_tickets",
+        "search_knowledge_base",
+        "list_policies",
+        "get_policy"
+      ],
+      "tools_called": [
+        "check_software_subscription",
+        "get_access_requests",
+        "get_approvals",
+        "get_employee",
+        "get_employee",
+        "get_employee"
+      ],
+      "tool_calls": [
+        {
+          "name": "check_software_subscription",
+          "args": {
+            "software": "Webex"
+          }
+        },
+        {
+          "name": "get_access_requests",
+          "args": {
+            "employee_id": "E010"
+          }
+        },
+        {
+          "name": "get_approvals",
+          "args": {
+            "record_id": "AR001"
+          }
+        },
+        {
+          "name": "get_employee",
+          "args": {
+            "query": "E018"
+          }
+        },
+        {
+          "name": "get_employee",
+          "args": {
+            "query": "E006"
+          }
+        },
+        {
+          "name": "get_employee",
+          "args": {
+            "query": "E011"
+          }
+        }
+      ],
+      "sources": [],
+      "approval_id": null,
+      "approvals": [],
+      "checklist": null,
+      "access_decision": null,
+      "handoff": null,
+      "heuristics": []
+    }
+  },
+  {
+    "case": "rachel",
+    "status": "completed",
+    "checks": {
+      "must_include": {
+        "employee is eligible for Webex": false,
+        "subscription is over seat limit": false,
+        "contract is close to renewal": false,
+        "do not claim access granted": false,
+        "reuse existing ticket T001 and access request AR001": false,
+        "durable approval for expansion or renewal": false
+      },
+      "must_not_include": {
+        "access already granted": true,
+        "only a password reset": true,
+        "no approval needed": true,
+        "a duplicate ticket or access request was created": true
+      },
+      "expected_documents": {
+        "documents/contracts/webex_vendor_agreement.md": false,
+        "documents/it_kb/webex_license_assignment.md": false,
+        "documents/it_kb/webex_login_issue.md": false,
+        "documents/policies/access_management_policy.md": false,
+        "documents/internal_memos/webex_license_cleanup_memo.md": false
+      },
+      "document_citations": {
+        "a next step gives an option from a document": false
+      },
+      "rows": {
+        "no ticket, access request or approval was created": true
+      },
+      "run": {
+        "ended pending": false
+      }
+    },
+    "failed": [
+      "must_include: employee is eligible for Webex",
+      "must_include: subscription is over seat limit",
+      "must_include: contract is close to renewal",
+      "must_include: do not claim access granted",
+      "must_include: reuse existing ticket T001 and access request AR001",
+      "must_include: durable approval for expansion or renewal",
+      "expected_documents: documents/contracts/webex_vendor_agreement.md",
+      "expected_documents: documents/it_kb/webex_license_assignment.md",
+      "expected_documents: documents/it_kb/webex_login_issue.md",
+      "expected_documents: documents/policies/access_management_policy.md",
+      "expected_documents: documents/internal_memos/webex_license_cleanup_memo.md",
+      "document_citations: a next step gives an option from a document",
+      "run: ended pending"
+    ],
+    "outcome": {
+      "answer": "Your access request for Webex (AR001) is blocked because the current subscription has 42 active seats while the contract allows only 40 [db:software_subscriptions#SUB001][db:access_requests#AR001]. Approval from IT Manager Amir Haddad (E006) is needed to plan a subscription expansion, and Finance Controller Tom Baker (E011) must approve the cost [db:approvals#AP001][db:approvals#AP002][db:employees#E006][db:employees#E011]. The subscription renews on July 20, 2026, in 19 days [db:software_subscriptions#SUB001].",
+      "citations": [
+        "[db:software_subscriptions#SUB001]",
+        "[db:access_requests#AR001]",
+        "[db:approvals#AP001]",
+        "[db:approvals#AP002]",
+        "[db:employees#E006]",
+        "[db:employees#E011]"
+      ],
+      "status": "completed",
+      "request_id": "webex-rachel-cf7241",
+      "trace_id": null,
+      "trace_url": null,
+      "scope": "webex",
+      "intent": "access_request",
+      "visible_tools": [
+        "get_employee",
+        "check_software_subscription",
+        "get_access_requests",
+        "get_approvals",
+        "list_employee_tickets",
+        "search_knowledge_base",
+        "list_policies",
+        "get_policy"
+      ],
+      "tools_called": [
+        "check_software_subscription",
+        "get_access_requests",
+        "get_approvals",
+        "get_employee",
+        "get_employee",
+        "get_employee"
+      ],
+      "tool_calls": [
+        {
+          "name": "check_software_subscription",
+          "args": {
+            "software": "Webex"
+          }
+        },
+        {
+          "name": "get_access_requests",
+          "args": {
+            "employee_id": "E010"
+          }
+        },
+        {
+          "name": "get_approvals",
+          "args": {
+            "record_id": "AR001"
+          }
+        },
+        {
+          "name": "get_employee",
+          "args": {
+            "query": "E018"
+          }
+        },
+        {
+          "name": "get_employee",
+          "args": {
+            "query": "E006"
+          }
+        },
+        {
+          "name": "get_employee",
+          "args": {
+            "query": "E011"
+          }
+        }
+      ],
+      "sources": [],
+      "approval_id": null,
+      "approvals": [],
+      "checklist": null,
+      "access_decision": null,
+      "handoff": null,
+      "heuristics": []
+    }
+  }
+]

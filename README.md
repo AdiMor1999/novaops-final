@@ -57,8 +57,8 @@ the file. A claim without a file is not made.
 | While a paused thread's approval has no decision, a new message is a normal turn and the thread stays paused; the resume happens only after a recorded decision; `tools_called` lists only the turn's own tools | `agent/run.py`, `agent/graph.py` (`awaiting`, `after_answer`), `tests/test_approval.py` | done (task #6) |
 | A Webex answer cites every expected document that reached the model, and its next steps give the documents' options with their labels | `agent/records.py`, `agent/graph.py` (`decide`, `merged_draft`), `evals/webex_cases.py` (`document_citations`) | done (task #6) |
 | The five heuristics added after live runs each have an off switch and record every firing in the trace | `agent/heuristics.py`, `evals/ablate.py`, `tests/test_observability.py` | done (task #6) |
-| Two LLM judges (citation quality, access overclaim) run as Langfuse-managed evaluators on `eval:baseline` and `eval:final` traces only | `evals/register_judges.py`, `evals/judge-iam-policy.json` | in progress (task #6) |
-| Measured numbers: S6 to S8 delta, retrieval hit rate, S9 turn 1, the `needs_human` citation split, heuristic ablations, Rachel before and after, S4 before and after | `evals/results/results.md`, `evals/results/README.md`, `evals/results/raw/` | in progress (task #6) |
+| Two LLM judges (citation quality, access overclaim) run as Langfuse-managed evaluators on `eval:baseline` and `eval:final` traces only | `evals/register_judges.py`, `evals/judge-iam-policy.json` | done (task #6) |
+| Measured numbers: S6 to S8 delta, retrieval hit rate, S9 turn 1, the `needs_human` citation split, heuristic ablations, Rachel before and after, S4 before and after | `evals/results/results.md`, `evals/results/README.md`, `evals/results/raw/` | done (task #6) |
 | Evaluation run and submission | `SUBMISSION.md` | planned (task #11) |
 
 ## Stack
@@ -259,7 +259,12 @@ Five rules were added after live runs, because a run failed without them. Each o
 behaviour beyond the brief, so each has an off switch (`NOVAOPS_HEURISTICS_OFF=<name>`,
 `agent/heuristics.py`) and records every firing in the turn's trace (`heuristics_fired` on
 the root span) and on `TurnOutcome.heuristics`. How often each fires, and what changes
-with it off over three full golden replays, is in `evals/results/results.md` ("Heuristics").
+with it off over three full golden replays, is in `evals/results/results.md` ("Heuristics");
+`evals/results/README.md` reads it. In short: `needs_tools_override` is worth 6 points of
+binding pass rate (S2 turn 3, S9 turns 1 and 5 fail without it), `fuzzy_name_lookup` 4
+(S7 and S8's "rrachel stein"), `title_chunk_demotion` 3 (S8 turn 1),
+`citation_brace_repair` none overall (S7 turn 4), and `self_access_confirmation` fires on
+no golden turn but on every Rachel run, which fails its whole rubric without it.
 
 | Heuristic | Where | What it does | Why it was added |
 | --- | --- | --- | --- |
@@ -274,7 +279,9 @@ with it off over three full golden replays, is in `evals/results/results.md` ("H
 Two LLM judges score each baseline and final turn: `citation_quality` (does each label
 support its claim) and `access_overclaim` (does the answer claim access was granted or
 overstate what was done). They run as Langfuse-managed evaluators, registered from
-`evals/register_judges.py` with the rubrics in code, at temperature 0 on Amazon Nova Pro.
+`evals/register_judges.py` with the rubrics in code, on Amazon Nova Pro at temperature 0
+(the v2 evaluator API cannot set it, so it is set on each evaluator in the Langfuse UI and
+checked on the judge's own generation).
 Langfuse reaches Bedrock through a dedicated IAM user that may only invoke Nova Pro
 (`evals/judge-iam-policy.json`); the project's main keys never go to Langfuse. Rules fire
 only on traces tagged `eval:baseline` or `eval:final`. One disagreement between a judge
