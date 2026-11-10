@@ -38,7 +38,7 @@ import logging
 import re
 from collections.abc import Callable
 
-from agent import config
+from agent import config, heuristics
 from agent.model import call_model, embed_text, forced_tool_input
 from mcp_server import opensearch
 from mcp_server.db import CallerAccess, caller_access
@@ -227,13 +227,16 @@ def header_only(source: dict) -> bool:
 
 
 def diverse(order: list[int], hits: list[dict], top_k: int,
-            per_doc: int = MAX_PER_DOC) -> list[int]:
+            per_doc: int = MAX_PER_DOC, demote: bool = True) -> list[int]:
     """The first top_k of `order`, at most `per_doc` per document; if fewer documents
-    than that matched, the remaining slots go to the next chunks in order. A header-only
-    chunk is skipped when a content chunk of its document is among the candidates."""
-    with_content = {h["_source"].get("doc_id") for h in hits if not header_only(h["_source"])}
-    order = [i for i in order if not (header_only(hits[i]["_source"])
-                                      and hits[i]["_source"].get("doc_id") in with_content)]
+    than that matched, the remaining slots go to the next chunks in order. With
+    `demote` (the `title_chunk_demotion` heuristic), a header-only chunk is skipped
+    when a content chunk of its document is among the candidates."""
+    if demote:
+        with_content = {h["_source"].get("doc_id") for h in hits
+                        if not header_only(h["_source"])}
+        order = [i for i in order if not (header_only(hits[i]["_source"])
+                                          and hits[i]["_source"].get("doc_id") in with_content)]
     picked, per = [], {}
     for i in order:
         doc = hits[i]["_source"].get("doc_id")
@@ -276,8 +279,13 @@ def search(query: str, corpora: tuple[str, ...], caller_id: str, top_k: int = TO
         scores, order = {}, list(range(len(hits)))
         reranked, fallback = False, str(exc)
 
-    chunks = [_chunk_result(hits[i], hits[i]["_score"], scores.get(i))
-              for i in diverse(order, hits, top_k)]
+    demote = heuristics.enabled("title_chunk_demotion")
+    picked = diverse(order, hits, top_k, demote=demote)
+    if demote and picked != diverse(order, hits, top_k, demote=False):
+        # This process is not the agent's; the name travels back in the result and
+        # agent/mcp_tools.py records it on the turn (agent/heuristics.py).
+        result[heuristics.SERVER_KEY] = ["title_chunk_demotion"]
+    chunks = [_chunk_result(hits[i], hits[i]["_score"], scores.get(i)) for i in picked]
     result.update(reranked=reranked, count=len(chunks), chunks=chunks)
     if note := precedence_note(chunks):
         result["precedence_note"] = note

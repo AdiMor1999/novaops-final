@@ -66,10 +66,15 @@ Never import from `lesson-code/` and never add it to `sys.path`. The repo has to
    `agent/model.py`. Never create a Bedrock runtime client anywhere else. boto retries are off,
    and one `should_retry` decides what is transient. Unknown error codes are permanent.
 2. Every entry point runs under Langfuse. Each trace carries `session_id` = thread id and
-   `user_id` = caller id, with `request_id` and the terminal `status` in metadata. Spans are
-   named `classify`, `scope`, `tool:<name>`, `write_gate`, `answer`. Never remove or bypass the
-   Langfuse callback on the compiled graph, and call `flush()` before the process exits. No
-   test catches a missing callback, which is why this rule lives here.
+   `user_id` = caller id, with `request_id` and the terminal `status` in metadata. Every node
+   and model call is traced: one span per graph node, named after the node (`classify`,
+   `scope`, `write_gate`, `answer`, ...), one `model:<role>` generation per model call with
+   the model id and token usage, and one `tool:<name>` span per tool call, all from
+   `agent/tracing.py` and `agent/mcp_tools.py`. No anonymous LangChain runnables. Call
+   `flush()` before the process exits. `python -m evals.trace_tree <trace_id>` checks the
+   shape. Exception: measurement runs whose results go only to `evals/results/` (ablations,
+   development runs) may run with `LANGFUSE_TRACING_ENABLED=false`; every graded and
+   baseline run is traced.
 3. Authorization, approvals and idempotency are enforced inside the MCP server, never by a
    prompt and never by a graph node alone. Gated writes require a recorded approval;
    `request_approval` only creates a pending row and is idempotent (rules in

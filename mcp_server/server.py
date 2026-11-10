@@ -28,7 +28,7 @@ from urllib.parse import urlparse
 from langfuse import get_client, propagate_attributes
 from mcp.server.fastmcp import Context, FastMCP
 
-from agent import config
+from agent import config, heuristics
 from mcp_server import db, retrieval, writes
 from mcp_server.context import CallerContext, from_request
 from mcp_server.db import ToolInputError
@@ -226,11 +226,15 @@ def get_employee(query: str, ctx: Context) -> dict:
         found = db.get_employee(conn, query)
         if found:
             return _rows(found, "", ("employees", "employee_id"))
+        if not heuristics.enabled("fuzzy_name_lookup"):
+            return _rows([], f"No employee matches {query!r}.", ("employees", "employee_id"))
         close = db.similar_employees(conn, query)
         note = (f"No name contains {query!r} exactly; these employees match words of it. "
                 "Check the name and id before acting on one." if close else "")
+        extra = {"match": "similar", "match_note": note,
+                 heuristics.SERVER_KEY: ["fuzzy_name_lookup"]} if close else {}
         return _rows(close, f"No employee matches {query!r}.", ("employees", "employee_id"),
-                     **({"match": "similar", "match_note": note} if close else {}))
+                     **extra)
     return _serve(ctx, "get_employee", {"query": query}, _db(work))
 
 

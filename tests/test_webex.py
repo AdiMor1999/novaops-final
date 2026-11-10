@@ -12,7 +12,7 @@ from agent.gate import judge_approval
 from agent.policy import LOADOUTS, checked_plan
 from agent.run import run_turn
 from agent.schemas import AccessDecision, DecisionDraft
-from mcp_server.writes import record_approval_decision
+from agent.approvals import decide
 from tests.agent_stubs import ScriptedModel, ScriptedPlanner, call, plan, say, use_stubs
 
 RACHEL = {"caller_id": "E010", "user_group": "UG_REGULAR"}
@@ -107,7 +107,7 @@ async def test_recorded_approval_releases_the_write_once_and_ends_blocked(seeded
     model = ScriptedModel(*diagnosis(), write)
     use_stubs(monkeypatch, ScriptedPlanner(ASK), model)
     await rachel("t-release")
-    record_approval_decision("AP001", "approved", "E006", reason="Seat freed by IT.")
+    decide("AP001", "approved", "E006", "t-release", reason="Seat freed by IT.")
     out = await run_turn("E006 approved it.", thread_id="t-release", **RACHEL)
     assert out.status == "blocked" and out.tools_called.count("create_access_request") == 1
     assert model.bound[-1] == ["create_access_request"]  # forced, and the only tool
@@ -124,7 +124,7 @@ async def test_recorded_approval_releases_the_write_once_and_ends_blocked(seeded
 async def test_rejected_approval_returns_a_blocked_decision(seeded, monkeypatch, conn):
     use_stubs(monkeypatch, ScriptedPlanner(ASK), ScriptedModel(*diagnosis()))
     await rachel("t-reject-rachel")
-    record_approval_decision("AP001", "rejected", "E006", reason="No seats this quarter.")
+    decide("AP001", "rejected", "E006", "t-reject-rachel", reason="No seats this quarter.")
     out = await run_turn("Any news?", thread_id="t-reject-rachel", **RACHEL)
     assert out.status == "blocked" and out.access_decision.status == "blocked"
     assert out.access_decision.blocking_reason.startswith("AP001 was rejected.")

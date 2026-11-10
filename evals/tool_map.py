@@ -51,3 +51,20 @@ def forbidden_tools_hit(forbidden: list[str], called: list[str]) -> list[str]:
     widened to its look-alikes."""
     names = {alternative for entry in forbidden for alternative in entry.split("|")}
     return [c for c in called if c in names]
+
+
+# `single_turn_cases.expected_sources` names database tables as well as documents
+# ("contracts", "onboarding_tasks"). A table is met when one of our tools that reads it
+# ran on the turn. check_software_subscription returns the subscription row joined with
+# its contract's dates and cost.
+TABLE_TOOLS: dict[str, frozenset[str]] = {
+    "contracts": frozenset({"check_software_subscription"}),
+    "software_subscriptions": frozenset({"check_software_subscription"}),
+    "onboarding_tasks": frozenset({"list_onboarding_tasks"}),
+}
+
+
+def table_read(table: str, called: list[str]) -> bool:
+    if table not in TABLE_TOOLS:
+        raise UnmappedTool(table)
+    return bool(TABLE_TOOLS[table] & set(called))

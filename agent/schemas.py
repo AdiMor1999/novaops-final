@@ -17,6 +17,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from agent import heuristics
+
 # A document section, [equipment_policy.md#Personal laptops], a database row,
 # [db:onboarding_tasks#OT005], or a whole database result, [db:assets], for a fact no
 # single row carries ("no headset is in stock in Israel"). The MCP tools return them in
@@ -135,13 +137,15 @@ class ObservedFact(BaseModel):
         brackets and each label becomes its own citation. Nothing else is rewritten:
         every label is still checked against the labels tools returned
         (agent/records.py), and a string with no label still fails."""
-        if not isinstance(value, list):
+        if not isinstance(value, list) or not heuristics.enabled("citation_brace_repair"):
             return value
         out = []
         for item in value:
             text = item.get("label") if isinstance(item, dict) else item
             found = LABEL.findall(text.translate(BRACES)) if isinstance(text, str) else []
             if found:
+                if found != [text]:
+                    heuristics.fired("citation_brace_repair")
                 out.extend({"label": label} for label in found)
             else:
                 out.append(item)
@@ -155,7 +159,8 @@ class DecisionDraft(BaseModel):
     observed_facts: list[ObservedFact] = Field(
         min_length=1, description="What the records and documents show, one fact each.")
     recommended_next_steps: list[str] = Field(
-        min_length=1, description="What people must do next, and who. Not done yet.")
+        min_length=1, description="What people must do next, and who. Not done yet. A "
+                                  "step a document offers ends with that document's label.")
 
     @model_validator(mode="after")
     def _claims_nothing_forbidden(self):
@@ -167,7 +172,14 @@ class DecisionDraft(BaseModel):
         return self
 
     def labels(self) -> set[str]:
-        return {c.label for f in self.observed_facts for c in f.citations}
+        """Every label the draft uses, in facts and in next steps, so a next step can
+        only cite evidence a tool returned (agent/records.py checks them)."""
+        steps = {label for step in self.recommended_next_steps for label in LABEL.findall(step)}
+        return {c.label for f in self.observed_facts for c in f.citations} | steps
+
+    def documents_cited(self) -> set[str]:
+        """File names (`webex_vendor_agreement.md`) of the documents the draft cites."""
+        return {label[1:].split("#", 1)[0] for label in self.labels() if ".md#" in label}
 
 
 class RecordRef(BaseModel):

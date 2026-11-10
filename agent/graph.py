@@ -57,7 +57,6 @@ from langchain_core.messages import (AIMessage, HumanMessage, RemoveMessage, Sys
                                      ToolMessage)
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import ToolException
-from langfuse.langchain import CallbackHandler
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.types import interrupt
@@ -76,9 +75,11 @@ from agent.policy import (APPROVAL_TOOL, CHECKLIST_TOOL, MAX_TOOL_CALLS, PLANNER
                           RELEASES, TurnPlan, checked_plan, missing_checklist, needs_approval,
                           rearm_tools, refine_note, visible_tools)
 from agent.ports import WEBEX_APPROVER
-from agent.records import CHECKLIST_PROMPT, DECISION_PROMPT, Validated
+from agent.records import (CHECKLIST_PROMPT, DECISION_PROMPT, Validated, documents_note,
+                           redraft_note)
 from agent.schemas import DecisionDraft, OnboardingChecklist
 from agent.structured import ParseFailed, parse_with_repair
+from agent.tracing import Traced, model_name_of, node
 
 KEEP_TURNS = 4          # earlier turns shown to the model, whole turns only
 TOOL_TEXT_CHARS = 3000  # per earlier tool result; the current turn's are never cut
@@ -311,12 +312,36 @@ def write_note(case: dict, approval: dict) -> str:
             "not grant access.")
 
 
+def case_documents(window: list) -> dict[str, list[str]]:
+    """Document file name -> the section labels tool results returned for it."""
+    documents: dict[str, list[str]] = {}
+    for label in sorted(known_labels(window)):
+        if ".md#" in label:
+            documents.setdefault(label[1:].split("#", 1)[0], []).append(label)
+    return documents
+
+
+def merged_draft(first: DecisionDraft, again: DecisionDraft) -> DecisionDraft:
+    """The first draft's facts, plus the re-draft's facts about documents the first one
+    did not cite; the re-draft's next steps only if one of them cites a document. A
+    re-draft that drops a precise row label keeps none of that loss."""
+    covered = first.documents_cited()
+    added = [f for f in again.observed_facts
+             if {c.label[1:].split("#", 1)[0] for c in f.citations if ".md#" in c.label}
+             - covered]
+    steps = again.recommended_next_steps if any(
+        ".md#" in step for step in again.recommended_next_steps) else first.recommended_next_steps
+    return first.model_copy(update={"observed_facts": [*first.observed_facts, *added],
+                                    "recommended_next_steps": steps})
+
+
 def decision_messages(window: list) -> list:
     """The forced draft's input: every message since the user opened the access case,
-    tool traffic as text."""
+    tool traffic as text, then the documents those results returned, by label."""
     return [SystemMessage(f"{DECISION_PROMPT}\nToday is {config.today().isoformat()}."),
             HumanMessage(f"Conversation and tool results:\n"
-                         f"{render_transcript(window, 10 ** 6)}")]
+                         f"{render_transcript(window, 10 ** 6)}\n\n"
+                         f"{documents_note(case_documents(window))}")]
 
 
 def from_message(messages: list, message_id: str | None) -> list:
@@ -390,18 +415,28 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
     tools = {t.name: t for t in as_langchain_tools(session, specs)}
     catalogue = sorted(tools)
     bound: dict[tuple, object] = {}
+    # Every model call is one `model:<role>` generation under the node that made it
+    # (agent/tracing.py). The models themselves carry no callbacks.
+    model_id = model_name_of(model)
 
-    def model_for(names: list[str]):
-        key = tuple(sorted(names))
+    def traced(runnable, role: str):
+        return None if runnable is None else Traced(runnable, role, model_id)
+
+    planner, distiller = traced(planner, "planner"), traced(distiller, "distiller")
+    checklist, decision = traced(checklist, "checklist"), traced(decision, "decision")
+
+    def model_for(names: list[str], role: str = "assistant"):
+        key = (role, *sorted(names))
         if key not in bound:
-            bound[key] = model.bind_tools([tools[n] for n in key]) if key else model
+            names = sorted(names)
+            bound[key] = traced(model.bind_tools([tools[n] for n in names]) if names
+                                else model, role)
         return bound[key]
 
     def mcp_config(config: RunnableConfig) -> dict:
-        # Only `configurable` goes to the tool. The node's callbacks would make the
-        # LangChain handler add a second span per call next to `tool:<name>`. They have
-        # to be replaced with [], because ensure_config() skips None and would inherit
-        # them from the running node's context.
+        # Only `configurable` goes to the tool. callbacks=[] keeps any LangChain
+        # callback in the node's context from adding a span next to `tool:<name>`;
+        # None would not, because ensure_config() skips None and inherits them.
         return {"configurable": config["configurable"], "callbacks": []}
 
     async def code_call(name: str, args: dict, config: RunnableConfig):
@@ -513,7 +548,7 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
         """The model bound to one tool it must call (Converse `toolChoice: tool`)."""
         key = ("force", name)
         if key not in bound:
-            bound[key] = model.bind_tools([tools[name]], tool_choice=name)
+            bound[key] = traced(model.bind_tools([tools[name]], tool_choice=name), "assistant")
         return bound[key]
 
     def model_calls(state: AgentState) -> int:
@@ -697,8 +732,22 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
         case = state["case"]
         window = from_message(state["messages"], state.get("decision_from"))
         known = known_labels(state["messages"])
-        draft = await parse_with_repair(Validated(decision, DecisionDraft, known),
-                                        decision_messages(window), DecisionDraft)
+        drafter = Validated(decision, DecisionDraft, known)
+        messages = decision_messages(window)
+        draft = await parse_with_repair(drafter, messages, DecisionDraft)
+        documents = case_documents(window)
+        missing = sorted(set(documents) - draft.documents_cited())
+        unlabelled = bool(documents) and not any(
+            ".md#" in step for step in draft.recommended_next_steps)
+        if missing or unlabelled:
+            # Task #6: a document the case searches returned and the draft never cites
+            # (the Rachel trace cited 2 of 5), or next steps with no document behind
+            # them. One more draft, asked to cover them; if it does not validate, the
+            # first draft stands. Costs one model call.
+            again = await drafter.ainvoke(
+                messages + [HumanMessage(redraft_note(missing, unlabelled))])
+            if again.get("parsed") is not None:
+                draft = merged_draft(draft, again["parsed"])
         record = webex.assemble_decision(draft, messages=window, employee_id=case["employee_id"],
                                          system=case["system"], system_id=case["system_id"],
                                          gate=state.get("gate"))
@@ -722,7 +771,7 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
         missing = uncited_sentences(draft)
         if not (missing or invented):
             return {"draft": draft}
-        repaired = await model_for([]).ainvoke(
+        repaired = await model_for([], role="citation_repair").ainvoke(
             repair_messages(state, draft, missing, invented))
         text = message_text(repaired)
         return {"draft": text, "uncited": uncited_sentences(text),
@@ -826,23 +875,23 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
         return "decide" if gate["state"] == "rejected" else "answer"
 
     graph = StateGraph(AgentState)
-    graph.add_node("distil", distil)
-    graph.add_node("classify", classify)
-    graph.add_node("lookup_subject", lookup_subject)
-    graph.add_node("scope", scope)
-    graph.add_node("gather", gather)
-    graph.add_node("tools", run_tools)
-    graph.add_node("rearm", rearm)
-    graph.add_node("refine", refine)
-    graph.add_node("request_approval", request_approval)
-    graph.add_node("await_approval", await_approval)
-    graph.add_node("write_gate", write_gate)
-    graph.add_node("decide", decide)
-    graph.add_node("handoff", handoff)
-    graph.add_node("unverified", unverified)
-    graph.add_node("cite", cite)
-    graph.add_node("checklist", make_checklist)
-    graph.add_node("answer", answer)
+    graph.add_node("distil", node("distil", distil))
+    graph.add_node("classify", node("classify", classify))
+    graph.add_node("lookup_subject", node("lookup_subject", lookup_subject))
+    graph.add_node("scope", node("scope", scope))
+    graph.add_node("gather", node("gather", gather))
+    graph.add_node("tools", node("tools", run_tools))
+    graph.add_node("rearm", node("rearm", rearm))
+    graph.add_node("refine", node("refine", refine))
+    graph.add_node("request_approval", node("request_approval", request_approval))
+    graph.add_node("await_approval", node("await_approval", await_approval))
+    graph.add_node("write_gate", node("write_gate", write_gate))
+    graph.add_node("decide", node("decide", decide))
+    graph.add_node("handoff", node("handoff", handoff))
+    graph.add_node("unverified", node("unverified", unverified))
+    graph.add_node("cite", node("cite", cite))
+    graph.add_node("checklist", node("checklist", make_checklist))
+    graph.add_node("answer", node("answer", answer))
 
     graph.add_conditional_edges(START, after_start, ["distil", "classify"])
     graph.add_edge("distil", "classify")
@@ -866,7 +915,6 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
                                 ["gather", "await_approval", "decide", "answer"])
     graph.add_edge("answer", END)
 
-    # The Langfuse callback is bound to the compiled graph (Lesson 11), so every node
-    # and model call is exported whoever invokes it. CLAUDE.md rule 2: never remove it.
-    return graph.compile(checkpointer=checkpointer).with_config(
-        {"callbacks": [CallbackHandler()]})
+    # Tracing is in the graph itself: every node is a span and every model call a
+    # generation (agent/tracing.py), whoever invokes it. CLAUDE.md rule 2.
+    return graph.compile(checkpointer=checkpointer)

@@ -105,3 +105,15 @@ def now_iso() -> str:
     written in one run still sort in the order they were written."""
     clock = datetime.now(timezone.utc).time().replace(microsecond=0)
     return f"{today().isoformat()}T{clock.isoformat()}Z"
+
+
+def heuristics_off() -> str:
+    """Comma list of agent/heuristics.py names switched off for an ablation run. Empty,
+    the default, means every heuristic is on. Optional in `.env.example`."""
+    return os.environ.get("NOVAOPS_HEURISTICS_OFF", "").strip()
+
+
+def judge_model_id() -> str:
+    """The judges' model (Amazon Nova Pro, `us.amazon.nova-pro-v1:0`). Langfuse calls it
+    through its own LLM connection; the repo uses it for the connection test only."""
+    return require("JUDGE_MODEL_ID")

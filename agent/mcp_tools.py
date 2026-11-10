@@ -9,7 +9,9 @@ Tools are discovered with `list_tools()` and never imported. Every call goes thr
 - opens a `tool:<name>` Langfuse span and passes its trace and observation ids in the
   same `_meta`, so server-side spans (retrieval, rerank) nest under it;
 - turns an `is_error` result into a `ToolException`, so a refused write or a bad
-  argument reaches the model as a message, not as a crash.
+  argument reaches the model as a message, not as a crash;
+- moves the server's heuristic firings (`_heuristics`) out of the result and into the
+  turn's record (agent/heuristics.py), so the model never sees them.
 
 `langchain-mcp-adapters` opens the session. Its own tool wrapper is not used, because it
 does not forward `_meta` on `call_tool`.
@@ -26,7 +28,7 @@ from langfuse import get_client
 from mcp import ClientSession
 from mcp.types import CallToolResult
 
-from agent import config
+from agent import config, heuristics
 
 CONTEXT_KEYS = ("caller_id", "user_group", "request_id")
 META_KEY = "novaops"
@@ -74,8 +76,12 @@ async def call_tool(session: ClientSession, name: str, args: dict, configurable:
         }}
         result = await session.call_tool(name, args, meta=meta)
         payload = decode_result(result)
+        fired = payload.pop(heuristics.SERVER_KEY, []) if isinstance(payload, dict) else []
+        for heuristic in fired:
+            heuristics.fired(heuristic)
         span.update(output=payload, level="ERROR" if result.isError else "DEFAULT",
-                    metadata={"is_error": result.isError, "request_id": context["request_id"]})
+                    metadata={"is_error": result.isError, "request_id": context["request_id"],
+                              **({"heuristics_fired": fired} if fired else {})})
     if result.isError:
         raise ToolException(payload if isinstance(payload, str) else json.dumps(payload))
     return payload
