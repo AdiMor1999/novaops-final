@@ -13,7 +13,10 @@ this decision, not the caller of the thread.
 
 from langfuse import get_client, propagate_attributes
 
+from mcp_server import db
 from mcp_server.writes import record_approval_decision
+
+DECIDED = ("approved", "rejected")
 
 
 def decide(approval_id: str, decision: str, actor_id: str, thread_id: str, *,
@@ -36,3 +39,13 @@ def decide(approval_id: str, decision: str, actor_id: str, thread_id: str, *,
     finally:
         langfuse.flush()
     return row
+
+
+def is_decided(approval_id: str) -> bool:
+    """True once a decision is recorded on the row. `run_turn()` asks this of a paused
+    thread's approval: decided resumes the pause, undecided runs the message as a
+    normal turn and the thread stays paused."""
+    with db.session() as conn:
+        row = conn.execute("SELECT status FROM approvals WHERE approval_id = ?",
+                           (approval_id,)).fetchone()
+    return row is not None and row["status"] in DECIDED

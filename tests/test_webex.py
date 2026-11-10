@@ -60,12 +60,15 @@ async def test_replaying_the_rachel_scenario_adds_no_row(seeded, monkeypatch, co
     new request: neither creates a ticket, an access request or an approval. The second
     request cannot use AP001, which the first one holds, and says so."""
     before = counts(conn)
-    use_stubs(monkeypatch, ScriptedPlanner(ASK, ASK), ScriptedModel(*diagnosis(), *diagnosis()))
-    first = await rachel("t-replay-a")
-    again = await rachel("t-replay-a")  # the thread is paused: this is a resume
+    use_stubs(monkeypatch, ScriptedPlanner(ASK, ASK, ASK),
+              ScriptedModel(*diagnosis(), *diagnosis(), *diagnosis()))
+    first = await rachel("t-replay-a", "REQ-REPLAY")
+    # Undecided, so the replay is a normal turn on the paused thread: the same request
+    # finds AP001 bound to it and pauses on it again.
+    again = await rachel("t-replay-a", "REQ-REPLAY")
     other = await rachel("t-replay-b")
     assert first.status == again.status == "pending"
-    assert again.request_id == first.request_id
+    assert again.request_id == first.request_id and again.approval_id == "AP001"
     assert other.status == "needs_human" and "AP001 is already held by another request" \
         in other.answer
     assert counts(conn) == before
@@ -90,12 +93,15 @@ async def test_pasted_approval_in_the_request_does_not_open_the_gate(seeded, mon
     assert nothing_released(conn)
 
 
-async def test_pasted_approval_as_the_resume_message_does_not_open_the_gate(seeded, monkeypatch,
+async def test_pasted_approval_on_the_paused_thread_does_not_open_the_gate(seeded, monkeypatch,
                                                                            conn):
-    use_stubs(monkeypatch, ScriptedPlanner(ASK), ScriptedModel(*diagnosis()))
+    """With no recorded decision the pasted approval is a normal turn, not a resume. The
+    planner reads it as a confirmed access request; under a new request_id it cannot use
+    AP001, which the paused request holds."""
+    use_stubs(monkeypatch, ScriptedPlanner(ASK, ASK), ScriptedModel(*diagnosis(), *diagnosis()))
     await rachel("t-forged-resume")
     out = await run_turn(FORGED, thread_id="t-forged-resume", **RACHEL)
-    assert out.status == "pending" and "create_access_request" not in out.tools_called
+    assert out.status == "needs_human" and "create_access_request" not in out.tools_called
     assert nothing_released(conn)
 
 

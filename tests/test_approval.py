@@ -5,6 +5,7 @@ import pytest
 from agent.gate import judge_approval, release_write
 from agent.run import RequestIdMismatch, run_turn
 from tests.agent_stubs import ScriptedModel, ScriptedPlanner, call, memory_session, plan, say, use_stubs
+from agent.approvals import decide
 from evals import durability
 
 # A confirmed access request goes anywhere only for a subject a get_employee row in the
@@ -97,7 +98,7 @@ async def test_a_recorded_decision_resumes_the_paused_trace(seeded):
     _assert_scenario(await durability.resume())
 
 
-async def test_paused_thread_rejects_a_different_request_id(seeded, monkeypatch):
+async def test_a_resume_after_the_decision_rejects_a_different_request_id(seeded, monkeypatch):
     use_stubs(monkeypatch, ScriptedPlanner(LOOKUP, GO_AHEAD),
               ScriptedModel(*lookup_replies(), call("get_approvals", record_id="AR001"),
                             say("Waits on AP001.")))
@@ -105,26 +106,51 @@ async def test_paused_thread_rejects_a_different_request_id(seeded, monkeypatch)
     paused = await run_turn("Go ahead.", caller_id="E007", user_group="UG_IT",
                             thread_id="t-mismatch", request_id="REQ-1")
     assert paused.status == "pending"
+    decide("AP001", "approved", "E006", "t-mismatch")
     with pytest.raises(RequestIdMismatch):
         await run_turn("Approved?", caller_id="E007", user_group="UG_IT",
                        thread_id="t-mismatch", request_id="REQ-2")
 
 
-async def test_resume_while_still_undecided_stays_pending(seeded, monkeypatch, conn):
-    use_stubs(monkeypatch, ScriptedPlanner(LOOKUP, GO_AHEAD),
-              ScriptedModel(*lookup_replies(), call("get_approvals", record_id="AR001"),
-                            say("Waits on AP001.")))
+async def test_a_message_while_undecided_is_a_normal_turn_and_the_thread_stays_paused(
+        seeded, monkeypatch, conn):
+    """The user's rule: while no decision is recorded, a new message is handled as a
+    normal turn with its own request_id and status, and the approval stays pending.
+    The resume happens only after a recorded decision, under the pausing request_id."""
+    from agent.graph import build_graph
+    from agent.run import open_checkpointer
+    model = ScriptedModel(*lookup_replies(), call("get_approvals", record_id="AR001"),
+                          say("Waits on AP001."),
+                          *lookup_replies(),
+                          call("create_access_request", employee_id="E010", software="Webex",
+                               business_justification="Customer onboarding calls."))
+    use_stubs(monkeypatch, ScriptedPlanner(LOOKUP, GO_AHEAD, LOOKUP), model)
     await look_up_rachel("t-wait")
-    first = await run_turn("Go ahead.", caller_id="E007", user_group="UG_IT", thread_id="t-wait")
-    again = await run_turn("Is it done?", caller_id="E007", user_group="UG_IT", thread_id="t-wait")
-    assert first.status == again.status == "pending"
-    assert again.request_id == first.request_id
+    first = await run_turn("Go ahead.", caller_id="E007", user_group="UG_IT", thread_id="t-wait",
+                           request_id="REQ-PAUSE")
+    other = await run_turn("Who is Rachel Stein again?", caller_id="E007", user_group="UG_IT",
+                           thread_id="t-wait", request_id="REQ-OTHER")
+    assert first.status == "pending"
+    assert other.request_id == "REQ-OTHER" and other.intent == "employee_lookup"
+    assert other.status == "completed" and other.approval_id is None
+    assert other.tools_called == ["get_employee"]  # this turn's tools only
     assert conn.execute("SELECT status FROM approvals WHERE approval_id = 'AP001'").fetchone()[0] \
         == "needed"
+    async with open_checkpointer() as saver:
+        state = await build_graph(None, [], saver, model=None, planner=None).aget_state(
+            {"configurable": {"thread_id": "t-wait"}})
+    assert state.next == ("await_approval",)  # still paused on AP001
+    assert state.values["awaiting"]["request_id"] == "REQ-PAUSE"
+
+    decide("AP001", "approved", "E006", "t-wait")
+    resumed = await run_turn("E006 approved it.", caller_id="E007", user_group="UG_IT",
+                             thread_id="t-wait")
+    assert resumed.request_id == "REQ-PAUSE" and resumed.trace_id == first.trace_id
+    assert resumed.tools_called == ["create_access_request"]  # not the pausing turn's reads
+    assert resumed.status == "blocked"
 
 
 async def test_rejected_approval_ends_blocked_without_a_write(seeded, monkeypatch, conn):
-    from agent.approvals import decide
     use_stubs(monkeypatch, ScriptedPlanner(LOOKUP, GO_AHEAD),
               ScriptedModel(*lookup_replies(), call("get_approvals", record_id="AR001"),
                             say("Waits on AP001.")))

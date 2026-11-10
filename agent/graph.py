@@ -9,8 +9,8 @@
                │  ├→ rearm → gather                (once, reads only)
                │  └→ refine → gather               (once: the checklist was never read)
                ├→ request_approval ─(already approved for this request)→ write_gate
-               │      └→ decide → await_approval (interrupt)
-               │                ↑ pending        │ resume
+               │      └→ decide → await_approval (interrupt) ←─ answer, while still awaiting
+               │                ↑ pending        │ resume (decision recorded)
                │                └── write_gate ←─┘
                │                     ├ approved → gather (the write, forced) → tools → decide → answer
                │                     ├ rejected → decide → answer
@@ -19,8 +19,8 @@
 
 Starting code: Lesson 10 `02-dynamic-tool-loadout/graph.py` and
 `03-history-distillation/graph.py` (plan → select → model ⇄ tools, rearm), the
-interrupt shape of Lesson 9 `03-human-in-the-loop/graph.py`, and the callback binding
-of Lesson 11 `02-instrument-agent/graph.py`. Changes:
+interrupt shape of Lesson 9 `03-human-in-the-loop/graph.py`, and the tracing of Lesson 11
+`02-instrument-agent/graph.py`. Changes:
 
 - `plan` and `select` are named `classify` and `scope`, the span names CLAUDE.md
   rule 2 fixes. `scope` also derives the assistant (`maya` or `webex`) from the intent.
@@ -46,6 +46,11 @@ of Lesson 11 `02-instrument-agent/graph.py`. Changes:
   the next model call is forced to the released write. Calls made by code go into the
   thread as tool call and result pairs, so they are cited, traced and listed like the
   model's, but they do not count against the model's per-turn cap.
+- Task #6: every node is a span and every model call a `model:<role>` generation
+  (agent/tracing.py) instead of Lesson 11's LangChain callback. A thread paused on an
+  approval with no decision yet runs a new message as a normal turn, then pauses on the
+  same approval again (`awaiting`, `after_answer`). The Webex decision cites every
+  document the case searches returned that bears on it, with one re-draft if it does not.
 """
 
 import json
@@ -154,6 +159,7 @@ class AgentState(TypedDict, total=False):
     turn_errors: list[str]
     approval: dict | None    # the request_approval row that gates the write (AP001)
     approvals: list[dict]    # every request_approval row of this case (AP001, AP002)
+    awaiting: dict | None    # the approval the thread is paused on, kept across later turns
     case: dict | None        # {employee_id, system, system_id, record_id} of the access case
     gate: dict | None        # the last GateDecision
     subject_note: str        # why lookup_subject verified nobody
@@ -697,15 +703,22 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
         return finish(approval=gating, approvals=rows, case=case)
 
     def await_approval(state: AgentState) -> dict:
-        """The pause. interrupt() returns here when run_turn() resumes the thread. The
-        resume value carries no decision: the decision is the approvals row, which
-        application code wrote with record_approval_decision, and write_gate reads it."""
-        approval = state["approval"]
+        """The pause, after the turn that asked for the approval and again after every
+        later turn while no decision is recorded. interrupt() returns here only when
+        run_turn() resumes the thread, which it does once the approvals row holds a
+        decision (agent/approvals.py); write_gate then reads that row. The turn that
+        paused may be several turns back, so its plan, case and approval come back
+        from `awaiting`."""
+        waiting = state["awaiting"]
+        approval = waiting["approval"]
         interrupt({"approval_id": approval["approval_id"], "record_id": approval["request_id"],
-                   "approver_id": approval["approver_id"], "request_id": state["request_id"],
-                   "also_requested": [a["approval_id"] for a in state.get("approvals") or []
+                   "approver_id": approval["approver_id"], "request_id": waiting["request_id"],
+                   "also_requested": [a["approval_id"] for a in waiting["approvals"]
                                       if a["approval_id"] != approval["approval_id"]]})
-        return {}
+        plan = waiting["plan"]
+        return {"approval": approval, "approvals": waiting["approvals"], "case": waiting["case"],
+                "decision_from": waiting["decision_from"], "plan": plan,
+                "intent": plan["intent"], "scope": waiting["scope"]}
 
     async def write_gate(state: AgentState, config: RunnableConfig) -> dict:
         approval = state["approval"]
@@ -716,6 +729,8 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
                                        record_id=approval["request_id"],
                                        approval_id=approval["approval_id"], replay=replay)
         update = {"gate": asdict(decision), "decided": False}
+        if decision.state != "pending":
+            update["awaiting"] = None  # decided: the thread no longer waits on it
         if decision.open:
             released = [n for n in decision.released if n in tools]
             update.update(visible_tools=released, force=released[0] if released else "",
@@ -753,8 +768,18 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
                                          gate=state.get("gate"))
         text = webex.render_decision(record, state.get("approval"), state.get("gate"))
         valid, _ = cited_labels(text, known)
-        return {"decision": record.model_dump(), "answer": text, "status": record.status,
-                "citations": valid, "decided": True, "messages": [AIMessage(content=text)]}
+        update = {"decision": record.model_dump(), "answer": text, "status": record.status,
+                  "citations": valid, "decided": True, "messages": [AIMessage(content=text)]}
+        if record.status == "pending":
+            # What a resume needs, several turns later: the turns in between replace
+            # plan, case and approval in state, and the server binds the approval to
+            # the request_id that asked for it.
+            update["awaiting"] = {
+                "approval": state["approval"], "approvals": state.get("approvals") or [],
+                "case": case, "decision_from": state.get("decision_from"),
+                "plan": state["plan"], "scope": state.get("scope"),
+                "request_id": state["request_id"], "trace_id": state.get("trace_id")}
+        return update
 
     async def cite(state: AgentState) -> dict:
         """Every fact-stating sentence on a turn with tool results must carry a label.
@@ -866,6 +891,11 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
     def after_decide(state: AgentState) -> str:
         return "await_approval" if state["status"] == "pending" else "answer"
 
+    def after_answer(state: AgentState) -> str:
+        """A turn on a thread that still waits on an approval pauses on it again, so the
+        next message after a recorded decision resumes it."""
+        return "await_approval" if state.get("awaiting") else END
+
     def after_gate(state: AgentState) -> str:
         gate = state["gate"]
         if gate["open"]:
@@ -913,7 +943,7 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
     graph.add_edge("await_approval", "write_gate")
     graph.add_conditional_edges("write_gate", after_gate,
                                 ["gather", "await_approval", "decide", "answer"])
-    graph.add_edge("answer", END)
+    graph.add_conditional_edges("answer", after_answer, ["await_approval", END])
 
     # Tracing is in the graph itself: every node is a span and every model call a
     # generation (agent/tracing.py), whoever invokes it. CLAUDE.md rule 2.

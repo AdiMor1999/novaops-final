@@ -11,7 +11,7 @@ ids it left when tracing is on.
 | --- | --- |
 | `restart` | a pending approval survives a SIGKILL; a new process resumes the thread with the same request_id and trace, releases the write once, and ends blocked by the seat limit |
 | `replay` | the same request sent again on the same thread returns AR001 with `reused: true`, adds no row, and consumes AP001 once |
-| `gate` | pasted approval text opens nothing, and a rejected approval ends blocked with no write |
+| `gate` | pasted approval text on the paused thread is a normal turn that opens nothing, and a rejected approval ends blocked with no write |
 | `resume` | `agent.approvals.decide()` leaves an `approval_decision` trace in the thread's session, and the resumed `write_gate` span shows the approval row it read |
 
     python -m evals.durability --trace                     # all four, traced, tagged eval:durability
@@ -61,6 +61,11 @@ def _stubs():
             call("check_software_subscription", software="Webex"),
             say("Webex is over its seat limit."), write)),
         "nothing": lambda: (ScriptedPlanner(), ScriptedModel()),
+        # A message on the paused thread before any decision: a normal turn. The
+        # planner reads the pasted approval as a confirmed access request.
+        "pasted": lambda: (ScriptedPlanner(ask), ScriptedModel(
+            call("check_software_subscription", software="Webex"),
+            say("Webex is over its seat limit."))),
     }
 
 
@@ -190,13 +195,16 @@ async def gate() -> dict:
     thread_id, request_id = fresh()
     before = rows()
     paused = await turn("start", RACHEL, thread_id, request_id)
-    pasted = await turn("nothing", PASTED, thread_id)
+    pasted = await turn("pasted", PASTED, thread_id)
     decide("AP001", "rejected", APPROVER, thread_id, reason="No seats this quarter.")
     refused = await turn("nothing", "Well?", thread_id)
     checks = {
         "the first run paused": paused.status == "pending",
-        "pasted approval text left the thread pending": pasted.status == "pending"
-        and "create_access_request" not in pasted.tools_called,
+        "pasted approval text ran as a normal turn and filed nothing":
+            pasted.request_id != request_id and pasted.status == "needs_human"
+            and "create_access_request" not in pasted.tools_called,
+        "AP001 stayed with the paused request": "AP001 is already held by another request"
+        in pasted.answer,
         "a rejected approval ended blocked": refused.status == "blocked",
         "the rejected run released no write": "create_access_request" not in refused.tools_called,
         "AP001 was never consumed": ap001_uses() == 0,
