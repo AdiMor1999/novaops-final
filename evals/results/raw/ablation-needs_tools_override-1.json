@@ -1,0 +1,1706 @@
+{
+  "sessions": {
+    "S1-quick-policy": [
+      {
+        "n": 1,
+        "kind": "retrieval",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "policy_question",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "get_policy"
+        ],
+        "sources": [
+          "policies/equipment_policy.md"
+        ],
+        "citations": [
+          "[equipment_policy.md#Personal laptops]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "NovaOps does not allow personal laptops for work [equipment_policy.md#Personal laptops]. There is a five-business-day IT continuity exception when a managed laptop is being repaired or replaced and the employee has no working device [equipment_policy.md#Personal laptops]. IT must approve and log the exception before the employee uses a personal machine, even for those five days [equipment_policy.md#Personal laptops]."
+      },
+      {
+        "n": 2,
+        "kind": "reasoning",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "policy_question",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[equipment_policy.md#Personal laptops]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "IT must approve and log the exception before you use a personal machine, even for those five days [equipment_policy.md#Personal laptops]. You cannot just go ahead without their approval."
+      },
+      {
+        "n": 3,
+        "kind": "reasoning",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "policy_question",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[equipment_policy.md#Equipment Policy]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "The Equipment Policy is owned by IT [equipment_policy.md#Equipment Policy]."
+      },
+      {
+        "n": 4,
+        "kind": "summary",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "policy_question",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[equipment_policy.md#Personal laptops]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "The policy forbids personal laptops for work except during a five-business-day IT continuity exception when a managed laptop is being repaired or replaced and the employee has no working device [equipment_policy.md#Personal laptops]. IT must approve and log the exception before the employee uses a personal machine, even for those five days [equipment_policy.md#Personal laptops]."
+      }
+    ],
+    "S2-onboarding-maya": [
+      {
+        "n": 1,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "employee_lookup",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "get_employee"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:employees#E001]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Maya Cohen is a Customer Success Manager in department D_CS, reporting to manager E018, and is preboarding for a full-time role starting 2026-08-01 in Israel [db:employees#E001]."
+      },
+      {
+        "n": 2,
+        "kind": "retrieval",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "onboarding_status",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "list_onboarding_tasks",
+          "search_hr_documents"
+        ],
+        "sources": [
+          "employment/maya_cohen_offer_letter.md",
+          "employment/maya_cohen_onboarding_summary.md",
+          "employment/equipment_responsibility_form.md",
+          "employment/sara_cohen_hr_onboarding_delegation.md",
+          "employment/yael_romano_manager_approval_profile.md"
+        ],
+        "citations": [
+          "[maya_cohen_offer_letter.md#Maya Cohen Offer Letter]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Maya Cohen's offer letter requires Okta, Slack, Notion, Salesforce, Webex, BambooHR employee self-service, and SupportDesk viewer, plus a laptop, monitor, dock, and headset [maya_cohen_offer_letter.md#Maya Cohen Offer Letter]."
+      },
+      {
+        "n": 3,
+        "kind": "lookup",
+        "binding": [
+          "expected a tool call, made none"
+        ],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": false,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "onboarding_status",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[db:employees#E001]",
+          "[db:onboarding_tasks]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Maya Cohen is preboarding for a full-time role starting 2026-08-01 in Israel [db:employees#E001]. Her onboarding tasks are: HR packet completed, Okta pending, laptop and remote equipment planned, Salesforce planned, Webex blocked, and BambooHR self-service planned [db:onboarding_tasks]."
+      },
+      {
+        "n": 4,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "ticket_status",
+        "scope": "webex",
+        "status": "completed",
+        "tools_called": [
+          "get_employee",
+          "list_employee_tickets"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:tickets#T001]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Rachel Stein's Webex login ticket is open [db:tickets#T001]. It was created today at 09:30 UTC and reports that while Okta login works, Webex says the account is not licensed [db:tickets#T001]."
+      },
+      {
+        "n": 5,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "onboarding_status",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "check_asset_inventory"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:assets#A005]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Yes, a MacBook Pro 14 is available in Israel and reserved for Maya Cohen [db:assets#A005]."
+      },
+      {
+        "n": 6,
+        "kind": "retrieval",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": false,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "equipment_request",
+        "scope": "webex",
+        "status": "completed",
+        "tools_called": [
+          "check_asset_inventory",
+          "check_asset_inventory",
+          "list_onboarding_tasks"
+        ],
+        "sources": [],
+        "citations": [
+          "[maya_cohen_offer_letter.md#Maya Cohen Offer Letter]",
+          "[db:assets#A006]",
+          "[db:assets]",
+          "[db:onboarding_tasks#OT003]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Maya Cohen is entitled to a monitor and a dock, and a laptop, as her offer letter includes a laptop, monitor, dock, and headset [maya_cohen_offer_letter.md#Maya Cohen Offer Letter]. However, there is a monitor available in Israel [db:assets#A006], but no headset in inventory [db:assets]. Her onboarding checklist shows that IT will prepare the laptop, monitor and dock [db:onboarding_tasks#OT003]."
+      },
+      {
+        "n": 7,
+        "kind": "reasoning",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": null
+        },
+        "citation_split": null,
+        "intent": "onboarding_status",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[db:employees#E001]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Maya Cohen is preboarding for a full-time role starting 2026-08-01 in Israel [db:employees#E001]."
+      },
+      {
+        "n": 8,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [
+          "uncited sentences ['There is no Webex seat available for Maya Cohen.']"
+        ],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": "uncited",
+        "intent": "subscription_review",
+        "scope": "webex",
+        "status": "needs_human",
+        "tools_called": [
+          "check_software_subscription"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:software_subscriptions#SUB001]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "There is no Webex seat available for Maya Cohen. The Webex subscription is over its seat limit, with 42 active seats against a limit of 40 [db:software_subscriptions#SUB001]. As you said, the Q3 SaaS freeze applies."
+      },
+      {
+        "n": 9,
+        "kind": "retrieval",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": false,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "policy_question",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "search_knowledge_base"
+        ],
+        "sources": [
+          "internal_memos/saas_renewal_freeze_q3.md",
+          "policies/saas_procurement_policy.md",
+          "contracts/zoominfo_data_subscription.md"
+        ],
+        "citations": [
+          "[saas_renewal_freeze_q3.md#Memo: Saas Renewal Freeze Q3]",
+          "[saas_procurement_policy.md#Approval threshold]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Yes, adding a seat needs Finance approval because the Q3 SaaS freeze sets the threshold for expansions above USD 7,500 annualized, and Finance handles the threshold check [saas_renewal_freeze_q3.md#Memo: Saas Renewal Freeze Q3][saas_procurement_policy.md#Approval threshold]."
+      },
+      {
+        "n": 10,
+        "kind": "action",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "access_request",
+        "scope": "maya",
+        "status": "pending",
+        "tools_called": [],
+        "sources": [],
+        "citations": [],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "I handed the Webex access request for E001 to the Webex access workflow, and it is pending. Approval AP005 is waiting on E006. Nothing is filed and no access is granted until the approver decides."
+      },
+      {
+        "n": 11,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "onboarding_status",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "list_onboarding_tasks"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:onboarding_tasks#OT002]",
+          "[db:onboarding_tasks#OT003]",
+          "[db:onboarding_tasks#OT004]",
+          "[db:onboarding_tasks#OT005]",
+          "[db:onboarding_tasks#OT006]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Maya Cohen's open onboarding tasks are:\n\n- Create Okta profile and baseline groups, due 2026-07-25 [db:onboarding_tasks#OT002]\n- Prepare laptop, monitor, dock, and MDM enrollment, due 2026-07-26 [db:onboarding_tasks#OT003]\n- Request Salesforce Customer Success profile, due 2026-07-28 [db:onboarding_tasks#OT004]\n- Request Webex standard user license, blocked [db:onboarding_tasks#OT005]\n- Add employee self-service profile in BambooHR, due 2026-07-28 [db:onboarding_tasks#OT006]"
+      },
+      {
+        "n": 12,
+        "kind": "summary",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "onboarding_status",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[db:onboarding_tasks#OT002]",
+          "[db:onboarding_tasks#OT003]",
+          "[db:onboarding_tasks#OT004]",
+          "[db:onboarding_tasks#OT005]",
+          "[db:onboarding_tasks#OT006]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Maya Cohen is preboarding for a full-time role starting 2026-08-01 in Israel.\n\nOpen onboarding tasks are:\n\n- Create Okta profile and baseline groups, due 2026-07-25 [db:onboarding_tasks#OT002]\n- Prepare laptop, monitor, dock, and MDM enrollment, due 2026-07-26 [db:onboarding_tasks#OT003]\n- Request Salesforce Customer Success profile, due 2026-07-28 [db:onboarding_tasks#OT004]\n- Request Webex standard user license, blocked [db:onboarding_tasks#OT005]\n- Add employee self-service profile in BambooHR, due 2026-07-28 [db:onboarding_tasks#OT006]\n\nThe Q3 SaaS freeze applies."
+      }
+    ],
+    "S3-intent-shift": [
+      {
+        "n": 1,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "subscription_review",
+        "scope": "webex",
+        "status": "completed",
+        "tools_called": [
+          "check_software_subscription"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:software_subscriptions#SUB001]",
+          "[db:software_subscriptions]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Webex is over its seat limit: 42 active seats against a limit of 40, so new seats are blocked for everyone until the subscription renews on July 20 [db:software_subscriptions#SUB001]. The database does not record which employee holds a seat, so we cannot tell who is using the extra seats [db:software_subscriptions]."
+      },
+      {
+        "n": 2,
+        "kind": "lookup",
+        "binding": [
+          "missing required facts ['T001']"
+        ],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "ticket_status",
+        "scope": "webex",
+        "status": "completed",
+        "tools_called": [
+          "list_employee_tickets"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:tickets]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "No, E007 has no open tickets [db:tickets]."
+      },
+      {
+        "n": 3,
+        "kind": "trivial",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": null
+        },
+        "citation_split": null,
+        "intent": "subscription_review",
+        "scope": "webex",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "The Webex seat limit issue is resolved as the seat expansion is already being handled by Amir. No further action is needed from you at this time."
+      },
+      {
+        "n": 4,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "employee_lookup",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "get_employee"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:employees#E015]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Alex Kim is a Data Integration Contractor, based in the United States, who started on April 15 and is contracted through October 15 [db:employees#E015]. Their user group is UG_REGULAR, and they have access to GitHub Limited, Jira, Slack Guest, Okta and Datadog ReadOnly [db:employees#E015]."
+      },
+      {
+        "n": 5,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": false,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "ticket_status",
+        "scope": "webex",
+        "status": "completed",
+        "tools_called": [
+          "get_access_requests"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:access_requests#AR002]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Yes, Alex Kim has a pending GitHub access request (AR002) for repo_contributor level, submitted on June 25 and awaiting approval from their manager E013 [db:access_requests#AR002]."
+      },
+      {
+        "n": 6,
+        "kind": "retrieval",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "policy_question",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "search_knowledge_base"
+        ],
+        "sources": [
+          "policies/security_and_mfa_policy.md",
+          "it_kb/github_access_for_contractors.md",
+          "contracts/github_enterprise_license.md",
+          "policies/access_management_policy.md"
+        ],
+        "citations": [
+          "[security_and_mfa_policy.md#Contractor access]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Contractor GitHub access requires named repository scope (not org-wide), manager approval, IT approval, a defined end date, and MDM compliance on the device being used [security_and_mfa_policy.md#Contractor access]."
+      },
+      {
+        "n": 7,
+        "kind": "retrieval",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "policy_question",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "search_hr_documents"
+        ],
+        "sources": [
+          "policies/security_and_mfa_policy.md",
+          "policies/access_management_policy.md",
+          "handbook/our-internal-systems.md",
+          "employment/contractor_access_addendum.md"
+        ],
+        "citations": [
+          "[contractor_access_addendum.md#Contractor Access Addendum]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Alex Kim's contractor paperwork adds that GitHub access requires named repositories, MDM, MFA, and an end date, and that contractor admin access is not allowed [contractor_access_addendum.md#Contractor Access Addendum]."
+      },
+      {
+        "n": 8,
+        "kind": "reasoning",
+        "binding": [
+          "missing required facts ['Rachel']"
+        ],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": null
+        },
+        "citation_split": null,
+        "intent": "employee_lookup",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[db:employees#E015]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "The person in your very first question was Alex Kim, employee ID E015, a Data Integration Contractor based in the United States who started on April 15 and is contracted through October 15 [db:employees#E015]."
+      },
+      {
+        "n": 9,
+        "kind": "summary",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": null
+        },
+        "citation_split": null,
+        "intent": "onboarding_status",
+        "scope": "maya",
+        "status": "needs_human",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[db:employees#E015]",
+          "[db:access_requests#AR002]",
+          "[security_and_mfa_policy.md#Contractor access]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Alex Kim is a Data Integration Contractor based in the United States who started on April 15 and is contracted through October 15 [db:employees#E015]. He has a pending GitHub access request (AR002) for repo_contributor level, submitted on June 25 and awaiting approval from his manager E013 [db:access_requests#AR002]. The request is blocked because contractor GitHub access requires named repository scope (not org-wide), manager approval, IT approval, a defined end date, and MDM compliance on the device being used [security_and_mfa_policy.md#Contractor access]."
+      }
+    ],
+    "S4-constraint-carry": [
+      {
+        "n": 1,
+        "kind": "trivial",
+        "binding": [],
+        "project_checks": [
+          "labels no tool returned ['[citation]']"
+        ],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": null
+        },
+        "citation_split": "invented",
+        "intent": "other",
+        "scope": "maya",
+        "status": "needs_human",
+        "tools_called": [],
+        "sources": [],
+        "citations": [],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Understood. Any SaaS expansion costing over 7,500 annually requires Finance sign-off due to the Q3 freeze[citation], and I will not file any requests until you explicitly tell me to proceed[citation]."
+      },
+      {
+        "n": 2,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "subscription_review",
+        "scope": "webex",
+        "status": "completed",
+        "tools_called": [
+          "check_software_subscription"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:software_subscriptions#SUB001]",
+          "[db:software_subscriptions]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "The Webex subscription costs $18,400 annually and has 40 seats, but 42 are in use, so it is over its limit by two seats, and the database does not record which employees hold seats [db:software_subscriptions#SUB001][db:software_subscriptions]."
+      },
+      {
+        "n": 3,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "subscription_review",
+        "scope": "webex",
+        "status": "completed",
+        "tools_called": [
+          "check_software_subscription"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:software_subscriptions#SUB014]",
+          "[db:software_subscriptions]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "The Miro subscription costs $7,200 annually [db:software_subscriptions#SUB014]. It has 25 seats, with 21 in use [db:software_subscriptions#SUB014]. It is not over its limit and has 4 seats available [db:software_subscriptions#SUB014]. The database does not record which employees hold seats [db:software_subscriptions#SUB014][db:software_subscriptions]."
+      },
+      {
+        "n": 4,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "subscription_review",
+        "scope": "webex",
+        "status": "completed",
+        "tools_called": [
+          "check_software_subscription"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:software_subscriptions#SUB013]",
+          "[db:software_subscriptions]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "The Figma subscription costs $9,600 annually and has 20 seats, with 17 in use and 3 available, so it is not over its limit [db:software_subscriptions#SUB013]. The database does not record which employees hold seats [db:software_subscriptions#SUB013][db:software_subscriptions]."
+      },
+      {
+        "n": 5,
+        "kind": "reasoning",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": false
+        },
+        "citation_split": null,
+        "intent": "policy_question",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[db:software_subscriptions#SUB001]",
+          "[db:software_subscriptions#SUB013]",
+          "[db:software_subscriptions#SUB014]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Webex and Figma require Finance sign-off because their annual costs exceed the $7,500 threshold [db:software_subscriptions#SUB001][db:software_subscriptions#SUB013]. Miro does not require Finance sign-off because its annual cost is below the threshold [db:software_subscriptions#SUB014]."
+      },
+      {
+        "n": 6,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "subscription_review",
+        "scope": "webex",
+        "status": "completed",
+        "tools_called": [
+          "check_software_subscription"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:software_subscriptions#SUB010]",
+          "[db:software_subscriptions#SUB001]",
+          "[db:software_subscriptions#SUB013]",
+          "[db:software_subscriptions#SUB014]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "ZoomInfo requires Finance sign-off because its annual cost of $33,000 exceeds the $7,500 threshold [db:software_subscriptions#SUB010]. Webex and Figma also require Finance sign-off for the same reason [db:software_subscriptions#SUB001][db:software_subscriptions#SUB013]. Miro does not require Finance sign-off because its annual cost is below the threshold [db:software_subscriptions#SUB014]."
+      },
+      {
+        "n": 7,
+        "kind": "reasoning",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": null
+        },
+        "citation_split": null,
+        "intent": "other",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "As you said, any SaaS expansion above $7,500/year requires Finance sign-off under the Q3 freeze, and you instructed not to file any requests until explicitly told to proceed."
+      },
+      {
+        "n": 8,
+        "kind": "action",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": false,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "access_request",
+        "scope": "webex",
+        "status": "pending",
+        "tools_called": [
+          "get_employee",
+          "get_access_requests",
+          "check_software_subscription",
+          "list_employee_tickets",
+          "search_knowledge_base",
+          "search_knowledge_base",
+          "get_approvals",
+          "request_approval",
+          "request_approval"
+        ],
+        "sources": [
+          "contracts/webex_vendor_agreement.md",
+          "internal_memos/webex_license_cleanup_memo.md",
+          "it_kb/webex_license_assignment.md",
+          "it_kb/webex_login_issue.md",
+          "policies/access_management_policy.md"
+        ],
+        "citations": [
+          "[db:software_subscriptions#SUB001]",
+          "[db:access_requests#AR001]",
+          "[db:employees#E010]",
+          "[db:tickets#T001]",
+          "[db:approvals#AP001]",
+          "[db:approvals#AP002]",
+          "[access_management_policy.md#Approval tiers]",
+          "[webex_vendor_agreement.md#Webex Saas Subscription Agreement]",
+          "[webex_license_cleanup_memo.md#Memo: Webex License Cleanup Memo]",
+          "[webex_license_assignment.md#First-line Troubleshooting]",
+          "[webex_login_issue.md#First-line Troubleshooting]"
+        ],
+        "heuristics": [
+          "title_chunk_demotion",
+          "citation_brace_repair"
+        ],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Status: pending.\nBlocker: Webex has 42 active seats against a 40-seat limit [db:software_subscriptions#SUB001]. The subscription is full for everyone, so no new seat can be assigned until seats are freed or the subscription is expanded [db:software_subscriptions#SUB001]. AR001 is blocked: Eligible by department, but seats exceed contract limit. [db:access_requests#AR001]\nWhat the records show:\n- Rachel Stein is eligible for Webex because her role, Customer Success Specialist, has Webex in systems_allowed_by_role. [db:employees#E010]\n- The Webex subscription has 42 active seats against a 40-seat limit, so a full subscription blocks new seats for everyone, not only Rachel Stein. [db:software_subscriptions#SUB001]\n- The Webex contract ends on 2026-07-20, which is 19 days from today. [db:software_subscriptions#SUB001]\n- There is already one open ticket T001 and one blocked access request AR001 for this problem. [db:tickets#T001] [db:access_requests#AR001]\n- The access request AR001 needs approval from IT Manager E006 and Finance E011, both of which are still needed. [db:approvals#AP001] [db:approvals#AP002]\n- The access management policy says standard role-based access requires manager approval, but the Webex contract requires IT Manager plus Finance approval for expansion because the seat limit is exceeded. [access_management_policy.md#Approval tiers] [webex_vendor_agreement.md#Webex Saas Subscription Agreement]\n- The Webex license cleanup memo says IT should not assign new seats until inactive seats are reclaimed or Finance approves expansion. [webex_license_cleanup_memo.md#Memo: Webex License Cleanup Memo]\n- The Webex license assignment runbook says if seats exceed the contract limit, do not assign another license; create a ticket and request expansion approval. [webex_license_assignment.md#First-line Troubleshooting]\n- The Webex login issue runbook also says if seats exceed the contract limit, do not assign another license; create a ticket and request expansion approval. [webex_login_issue.md#First-line Troubleshooting]\nExisting records, reused rather than duplicated: T001 (ticket, open) [db:tickets#T001]; AR001 (access request, blocked) [db:access_requests#AR001].\nActions taken:\n- Asked E006 to approve AP001 (access_request for AR001): reused the existing row, status needed. [db:approvals#AP001]\n- Asked E011 to approve AP002 (subscription_expansion for AR001): reused the existing row, status needed. [db:approvals#AP002]\nNext steps:\n- IT Manager reviews the expansion path and approves or rejects it [access_management_policy.md#Approval tiers]\n- Finance reviews the expansion request and approves or rejects it [webex_vendor_agreement.md#Webex Saas Subscription Agreement]\n- IT investigates and reclaims any inactive Webex seats to bring the count to or below the contract limit [webex_license_cleanup_memo.md#Memo: Webex License Cleanup Memo]\nNothing is filed and no access is granted until E006 decides on AP001 [db:approvals#AP001]."
+      },
+      {
+        "n": 9,
+        "kind": "summary",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "subscription_review",
+        "scope": "webex",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[db:software_subscriptions#SUB001]",
+          "[db:software_subscriptions#SUB013]",
+          "[db:software_subscriptions#SUB014]",
+          "[db:software_subscriptions#SUB010]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "The four subscriptions are Webex at $18,400/year with 42 active seats against a 40-seat limit, Miro at $7,200/year with 21 active seats against a 25-seat limit, Figma at $9,600/year with 17 active seats against a 20-seat limit, and ZoomInfo at $33,000/year with 12 active seats against a 15-seat limit. Webex, Figma, and ZoomInfo each cost over the $7,500 threshold and therefore require Finance sign-off; Miro does not because its cost is below the threshold [db:software_subscriptions#SUB001][db:software_subscriptions#SUB013][db:software_subscriptions#SUB014][db:software_subscriptions#SUB010]."
+      }
+    ],
+    "S5-noisy-inbox": [
+      {
+        "n": 1,
+        "kind": "retrieval",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": false
+        },
+        "citation_split": null,
+        "intent": "access_request",
+        "scope": "webex",
+        "status": "completed",
+        "tools_called": [
+          "get_employee",
+          "list_employee_tickets",
+          "get_access_requests",
+          "search_knowledge_base"
+        ],
+        "sources": [
+          "it_kb/okta_device_change.md",
+          "it_kb/mfa_reset.md",
+          "policies/remote_work_policy.md",
+          "it_kb/password_reset.md"
+        ],
+        "citations": [
+          "[db:employees#E002]",
+          "[mfa_reset.md#First-line Troubleshooting]"
+        ],
+        "heuristics": [
+          "title_chunk_demotion"
+        ],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Daniel Levi, a backend engineer, cannot log in after switching to a new phone because the authenticator app does not show work account codes [db:employees#E002]. \n\nThe knowledge base says to verify identity, reset the factor in Okta Helpdesk, and require immediate re-enrollment [mfa_reset.md#First-line Troubleshooting]. "
+      },
+      {
+        "n": 2,
+        "kind": "retrieval",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "policy_question",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "search_knowledge_base"
+        ],
+        "sources": [
+          "it_kb/vpn_access.md",
+          "policies/security_and_mfa_policy.md",
+          "it_kb/mfa_reset.md",
+          "policies/remote_work_policy.md"
+        ],
+        "citations": [
+          "[db:employees#E002]",
+          "[mfa_reset.md#First-line Troubleshooting]",
+          "[vpn_access.md#First-line Troubleshooting]"
+        ],
+        "heuristics": [
+          "title_chunk_demotion"
+        ],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Daniel Levi, a backend engineer, cannot log in after switching to a new phone because the authenticator app does not show work account codes [db:employees#E002]. \n\nThe knowledge base says to verify identity, reset the factor in Okta Helpdesk, and require immediate re-enrollment [mfa_reset.md#First-line Troubleshooting].\n\nThe process for VPN access is to confirm the target actually requires VPN, verify MFA and device trust, and check the VPN group [vpn_access.md#First-line Troubleshooting]."
+      },
+      {
+        "n": 3,
+        "kind": "retrieval",
+        "binding": [
+          "expected a tool call, made none"
+        ],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": false,
+          "intent_matches": false
+        },
+        "citation_split": null,
+        "intent": "other",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[db:employees#E002]",
+          "[mfa_reset.md#First-line Troubleshooting]",
+          "[vpn_access.md#First-line Troubleshooting]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Daniel Levi, a backend engineer, cannot log in after switching to a new phone because the authenticator app does not show work account codes [db:employees#E002].\n\nThe knowledge base says to verify identity, reset the factor in Okta Helpdesk, and require immediate re-enrollment [mfa_reset.md#First-line Troubleshooting].\n\nThe process for VPN access is to confirm the target actually requires VPN, verify MFA and device trust, and check the VPN group [vpn_access.md#First-line Troubleshooting].\n\nRegarding the other employee who asked about resetting their password today, you will need to handle that request separately following the appropriate password reset procedures."
+      },
+      {
+        "n": 4,
+        "kind": "reasoning",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": false
+        },
+        "citation_split": null,
+        "intent": "other",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[db:employees#E002]",
+          "[mfa_reset.md#First-line Troubleshooting]",
+          "[vpn_access.md#First-line Troubleshooting]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Daniel Levi, a backend engineer, cannot log in after switching to a new phone because the authenticator app does not show work account codes [db:employees#E002].\n\nThe user can sort out the MFA reset themselves by following the knowledge base steps to verify identity, reset the factor in Okta Helpdesk, and re-enroll immediately [mfa_reset.md#First-line Troubleshooting]. \n\nThe VPN access process also requires the user to confirm the target actually requires VPN, verify MFA and device trust, and check the VPN group, which they can do themselves [vpn_access.md#First-line Troubleshooting].\n\nThe broken coffee machine on floor 2 needs someone from IT or facilities to look at, as it is not something the user can resolve themselves. \n\nRegarding the other employee who asked about resetting their password today, that request will need to be handled separately following the appropriate password reset procedures."
+      },
+      {
+        "n": 5,
+        "kind": "retrieval",
+        "binding": [
+          "expected a tool call, made none"
+        ],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": false,
+          "intent_matches": false
+        },
+        "citation_split": null,
+        "intent": "onboarding_status",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[mfa_reset.md#First-line Troubleshooting]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Daniel Levi can still follow the same steps to reset his MFA factor despite switching to a new phone. The knowledge base says to verify identity, reset the factor in Okta Helpdesk, and require immediate re-enrollment [mfa_reset.md#First-line Troubleshooting]. The new phone does not change these steps; he just needs to ensure the new device is properly enrolled after the reset."
+      },
+      {
+        "n": 6,
+        "kind": "reasoning",
+        "binding": [
+          "missing required facts ['which|clarify|mean|specify|not sure']"
+        ],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": null
+        },
+        "citation_split": null,
+        "intent": "other",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "You mentioned that another employee also asked about a password reset today. This is a separate issue from Daniel Levi's MFA problem and should be handled following the appropriate password reset procedures. It does not affect Daniel Levi's MFA reset steps."
+      },
+      {
+        "n": 7,
+        "kind": "retrieval",
+        "binding": [
+          "missing required facts ['five|5']",
+          "expected a tool call, made none"
+        ],
+        "project_checks": [
+          "labels no tool returned ['[equipment_policy.md#Personal laptops]']"
+        ],
+        "illustrative": {
+          "expected_tools_met": false,
+          "intent_matches": true
+        },
+        "citation_split": "invented",
+        "intent": "policy_question",
+        "scope": "maya",
+        "status": "needs_human",
+        "tools_called": [],
+        "sources": [],
+        "citations": [],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Daniel Levi can use his own laptop while traveling if his work laptop is not functioning, but he must follow the company's equipment policy: personal devices are allowed for work only with IT approval, proper security configurations, and network access restrictions [equipment_policy.md#Personal laptops]. He should contact IT to get approval and ensure his personal device meets all security requirements before using it for work tasks."
+      },
+      {
+        "n": 8,
+        "kind": "summary",
+        "binding": [],
+        "project_checks": [
+          "labels no tool returned ['[equipment_policy.md#Personal laptops]']"
+        ],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": null
+        },
+        "citation_split": "invented",
+        "intent": "ticket_status",
+        "scope": "webex",
+        "status": "needs_human",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[db:employees#E002]",
+          "[mfa_reset.md#First-line Troubleshooting]",
+          "[vpn_access.md#First-line Troubleshooting]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Daniel Levi, a backend engineer, cannot log in after switching to a new phone because the authenticator app does not show work account codes [db:employees#E002].\n\n**What Daniel needs to do:**\n- Reset his MFA factor by verifying identity, resetting the factor in Okta Helpdesk, and re-enrolling immediately on his new phone [mfa_reset.md#First-line Troubleshooting].\n- Confirm whether he actually needs VPN access, verify MFA and device trust, and check the VPN group himself [vpn_access.md#First-line Troubleshooting].\n- If his work laptop is not functioning while traveling, request IT approval to use his personal laptop, ensuring it meets all security requirements [equipment_policy.md#Personal laptops].\n\n**What you need to do:**\n- Advise Daniel to follow the MFA reset steps and VPN access checklist himself.\n- If his work laptop fails while he is away, process his request to use a personal device, checking security compliance and granting necessary access.\n- Arrange for facilities or IT to service the broken coffee machine on floor 2, as this requires professional attention. \n\nThe separate password reset request from another employee should be handled following the appropriate procedures."
+      }
+    ],
+    "S6-boundary-clean": [
+      {
+        "n": 1,
+        "kind": "retrieval",
+        "binding": [
+          "missing required facts ['device|trust']"
+        ],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "policy_question",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "search_knowledge_base"
+        ],
+        "sources": [
+          "policies/remote_work_policy.md",
+          "policies/security_and_mfa_policy.md",
+          "policies/acceptable_use_policy.md",
+          "it_kb/vpn_access.md",
+          "policies/access_management_policy.md"
+        ],
+        "citations": [
+          "[remote_work_policy.md#Working securely from home]",
+          "[security_and_mfa_policy.md#Authentication]",
+          "[vpn_access.md#First-line Troubleshooting]"
+        ],
+        "heuristics": [
+          "title_chunk_demotion"
+        ],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "The process for VPN access requires MFA on every login, using a managed laptop with disk encryption and screen lock enabled, and working only on secure, non-public Wi-Fi connections [remote_work_policy.md#Working securely from home][security_and_mfa_policy.md#Authentication][vpn_access.md#First-line Troubleshooting]."
+      },
+      {
+        "n": 2,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "employee_lookup",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "get_employee"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:employees#E010]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Rachel Stein's employee record shows she is a Customer Success Specialist in the United Kingdom, starting on February 3, 2025, and is active with full-time status [db:employees#E010]."
+      },
+      {
+        "n": 3,
+        "kind": "reasoning",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "access_request",
+        "scope": "webex",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[db:employees#E010]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Rachel Stein, a Customer Success Specialist in the United Kingdom starting on February 3, 2025, requires Webex access to conduct client meetings and support sessions as part of her role [db:employees#E010]."
+      },
+      {
+        "n": 4,
+        "kind": "action",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": false,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "access_request",
+        "scope": "webex",
+        "status": "pending",
+        "tools_called": [
+          "get_access_requests",
+          "check_software_subscription",
+          "list_employee_tickets",
+          "search_knowledge_base",
+          "search_knowledge_base",
+          "get_approvals",
+          "request_approval",
+          "request_approval"
+        ],
+        "sources": [
+          "contracts/webex_vendor_agreement.md",
+          "internal_memos/webex_license_cleanup_memo.md",
+          "it_kb/webex_license_assignment.md",
+          "it_kb/webex_login_issue.md",
+          "policies/access_management_policy.md"
+        ],
+        "citations": [
+          "[db:software_subscriptions#SUB001]",
+          "[db:access_requests#AR001]",
+          "[db:tickets#T001]",
+          "[access_management_policy.md#Approval tiers]",
+          "[webex_vendor_agreement.md#Webex Saas Subscription Agreement]",
+          "[webex_license_cleanup_memo.md#Memo: Webex License Cleanup Memo]",
+          "[webex_license_assignment.md#First-line Troubleshooting]",
+          "[webex_login_issue.md#First-line Troubleshooting]",
+          "[db:approvals#AP001]",
+          "[db:approvals#AP002]"
+        ],
+        "heuristics": [
+          "title_chunk_demotion",
+          "citation_brace_repair"
+        ],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Status: pending.\nBlocker: Webex has 42 active seats against a 40-seat limit [db:software_subscriptions#SUB001]. The subscription is full for everyone, so no new seat can be assigned until seats are freed or the subscription is expanded [db:software_subscriptions#SUB001]. AR001 is blocked: Eligible by department, but seats exceed contract limit. [db:access_requests#AR001]\nWhat the records show:\n- Rachel Stein is eligible for Webex by department, but the access request is blocked because seats exceed the contract limit. [db:access_requests#AR001]\n- The Webex subscription has 42 active seats against a 40-seat limit, and a full subscription blocks new seats for everyone, not only this person. [db:software_subscriptions#SUB001]\n- The Webex contract ends on 2026-07-20, which is 19 days from today. [db:software_subscriptions#SUB001]\n- There is already an open ticket T001 and an access request AR001 for this problem. [db:tickets#T001] [db:access_requests#AR001]\n- The access management policy says standard role-based access requires manager approval. [access_management_policy.md#Approval tiers]\n- The Webex vendor agreement says expansion requires IT Manager plus Finance approval if it exceeds the threshold. [webex_vendor_agreement.md#Webex Saas Subscription Agreement]\n- The Webex license cleanup memo says IT should not assign new seats until inactive seats are reclaimed or Finance approves expansion. [webex_license_cleanup_memo.md#Memo: Webex License Cleanup Memo]\n- The Webex license assignment KB says to verify seat limit, active seats, and renewal date, and that the current known issue is seats exceeding the limit. [webex_license_assignment.md#First-line Troubleshooting]\n- The Webex login issue KB says if seats exceed the contract limit, do not assign another license; create a ticket and request expansion approval. [webex_login_issue.md#First-line Troubleshooting]\nExisting records, reused rather than duplicated: T001 (ticket, open) [db:tickets#T001]; AR001 (access request, blocked) [db:access_requests#AR001].\nActions taken:\n- Asked E006 to approve AP001 (access_request for AR001): reused the existing row, status needed. [db:approvals#AP001]\n- Asked E011 to approve AP002 (subscription_expansion for AR001): reused the existing row, status needed. [db:approvals#AP002]\nNext steps:\n- Reclaim unused seats from IT to free up licenses for Rachel Stein, per the Webex license cleanup memo [webex_license_cleanup_memo.md#Memo: Webex License Cleanup Memo]\n- Request IT Manager approval for the expansion path for Rachel Stein's Webex access [db:approvals#AP001]\n- Request Finance approval for the Webex subscription expansion [db:approvals#AP002]\nNothing is filed and no access is granted until E006 decides on AP001 [db:approvals#AP001]."
+      }
+    ],
+    "S7-boundary-noisy": [
+      {
+        "n": 1,
+        "kind": "retrieval",
+        "binding": [
+          "missing required facts ['device|trust']"
+        ],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "policy_question",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "search_knowledge_base"
+        ],
+        "sources": [
+          "it_kb/vpn_access.md",
+          "policies/remote_work_policy.md",
+          "policies/security_and_mfa_policy.md",
+          "policies/acceptable_use_policy.md"
+        ],
+        "citations": [
+          "[security_and_mfa_policy.md#Authentication]",
+          "[remote_work_policy.md#Working securely from home]"
+        ],
+        "heuristics": [
+          "title_chunk_demotion"
+        ],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "The VPN process requires you to use MFA through Okta on every login [security_and_mfa_policy.md#Authentication]. You must keep your home Wi-Fi on WPA2/WPA3 with a non-default password and avoid working on customer or source-code data over public Wi-Fi without the company VPN [remote_work_policy.md#Working securely from home]. A managed laptop's disk encryption and screen lock are mandatory, and you must not disable them for convenience [remote_work_policy.md#Working securely from home]."
+      },
+      {
+        "n": 2,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "employee_lookup",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "get_employee"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:employees#E010]"
+        ],
+        "heuristics": [
+          "fuzzy_name_lookup"
+        ],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "I found one employee who matches the words in \"rrachel stein\":\n\nRachel Stein, employee ID E010, is a Customer Success Specialist in the United Kingdom, started on February 3, 2025 [db:employees#E010]."
+      },
+      {
+        "n": 3,
+        "kind": "reasoning",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": false
+        },
+        "citation_split": null,
+        "intent": "other",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[db:employees#E010]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "As requested, here is a one-sentence justification for Rachel Stein\u2019s Webex request: \u201cRachel Stein, a Customer Success Specialist in the United Kingdom, requires Webex access to conduct client meetings and support sessions as part of her role, aligning with her systems allowance and job responsibilities [db:employees#E010].\u201d"
+      },
+      {
+        "n": 4,
+        "kind": "action",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": false,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "access_request",
+        "scope": "webex",
+        "status": "pending",
+        "tools_called": [
+          "check_software_subscription",
+          "list_employee_tickets",
+          "get_access_requests",
+          "search_knowledge_base",
+          "search_knowledge_base",
+          "get_approvals",
+          "request_approval",
+          "request_approval"
+        ],
+        "sources": [
+          "contracts/webex_vendor_agreement.md",
+          "internal_memos/webex_license_cleanup_memo.md",
+          "it_kb/webex_license_assignment.md",
+          "it_kb/webex_login_issue.md",
+          "policies/access_management_policy.md"
+        ],
+        "citations": [
+          "[db:software_subscriptions#SUB001]",
+          "[db:access_requests#AR001]",
+          "[db:tickets#T001]",
+          "[db:approvals#AP001]",
+          "[db:approvals#AP002]",
+          "[webex_license_cleanup_memo.md#Memo: Webex License Cleanup Memo]",
+          "[webex_license_assignment.md#First-line Troubleshooting]",
+          "[webex_login_issue.md#First-line Troubleshooting]",
+          "[webex_vendor_agreement.md#Webex Saas Subscription Agreement]",
+          "[access_management_policy.md#Approval tiers]"
+        ],
+        "heuristics": [
+          "title_chunk_demotion",
+          "citation_brace_repair",
+          "citation_brace_repair",
+          "citation_brace_repair",
+          "citation_brace_repair",
+          "citation_brace_repair",
+          "citation_brace_repair"
+        ],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Status: pending.\nBlocker: Webex has 42 active seats against a 40-seat limit [db:software_subscriptions#SUB001]. The subscription is full for everyone, so no new seat can be assigned until seats are freed or the subscription is expanded [db:software_subscriptions#SUB001]. AR001 is blocked: Eligible by department, but seats exceed contract limit. [db:access_requests#AR001]\nWhat the records show:\n- Rachel Stein is eligible for Webex by department, but the access request is blocked because seats exceed the contract limit. [db:access_requests#AR001]\n- The Webex subscription has 42 active seats against a 40-seat limit, and a full subscription blocks new seats for everyone, not only this person. [db:software_subscriptions#SUB001]\n- The Webex contract ends on 2026-07-20, which is 19 days from today. [db:software_subscriptions#SUB001]\n- There is already an open ticket T001 and a blocked access request AR001 for this problem. [db:tickets#T001] [db:access_requests#AR001]\n- The IT Manager must approve the expansion path, and Finance must approve the expansion, and both approvals are still needed. [db:approvals#AP001] [db:approvals#AP002]\n- The knowledge base and policies state that when seats exceed the contract limit, no new license should be assigned, and an expansion approval should be created instead. [webex_license_cleanup_memo.md#Memo: Webex License Cleanup Memo] [webex_license_assignment.md#First-line Troubleshooting] [webex_login_issue.md#First-line Troubleshooting]\n- The Webex vendor agreement states that expansion requires IT Manager plus Finance approval if it exceeds the threshold. [webex_vendor_agreement.md#Webex Saas Subscription Agreement]\n- The access management policy states that standard role-based access requires manager approval, and privileged or admin access requires IT Manager approval on top of the manager's. [access_management_policy.md#Approval tiers]\nExisting records, reused rather than duplicated: T001 (ticket, open) [db:tickets#T001]; AR001 (access request, blocked) [db:access_requests#AR001].\nActions taken:\n- Asked E006 to approve AP001 (access_request for AR001): reused the existing row, status needed. [db:approvals#AP001]\n- Asked E011 to approve AP002 (subscription_expansion for AR001): reused the existing row, status needed. [db:approvals#AP002]\nNext steps:\n- IT Manager E006 approves the expansion path for Rachel Stein's Webex access [db:approvals#AP001]\n- Finance E011 approves the subscription expansion for Webex [db:approvals#AP002]\n- IT reviews inactive seats and reclaims them [webex_license_cleanup_memo.md#Memo: Webex License Cleanup Memo]\nNothing is filed and no access is granted until E006 decides on AP001 [db:approvals#AP001]."
+      }
+    ],
+    "S8-boundary-heavy-noise": [
+      {
+        "n": 1,
+        "kind": "retrieval",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "policy_question",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "search_knowledge_base"
+        ],
+        "sources": [
+          "policies/remote_work_policy.md",
+          "it_kb/vpn_access.md",
+          "policies/onboarding_policy.md",
+          "it_kb/password_reset.md"
+        ],
+        "citations": [
+          "[remote_work_policy.md#Working securely from home]",
+          "[vpn_access.md#First-line Troubleshooting]"
+        ],
+        "heuristics": [
+          "title_chunk_demotion"
+        ],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Remote employees must use MFA on every login, keep home Wi\u2011Fi on WPA2/WPA3 with a non\u2011default password, and avoid working on customer or source-code data over public Wi\u2011Fi without the company VPN [remote_work_policy.md#Working securely from home]. First\u2011line troubleshooting for VPN includes confirming the target actually requires VPN, verifying MFA and device trust, and checking the VPN group [vpn_access.md#First-line Troubleshooting]. You can find full step\u2011by\u2011step connection instructions in the VPN Access article [vpn_access.md#First-line Troubleshooting]."
+      },
+      {
+        "n": 2,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "employee_lookup",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "get_employee"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:employees#E010]"
+        ],
+        "heuristics": [
+          "fuzzy_name_lookup"
+        ],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Rachel Stein is employee E010, a Customer Success Specialist in the United Kingdom on the regular user group, reporting to manager E018 [db:employees#E010]."
+      },
+      {
+        "n": 3,
+        "kind": "reasoning",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "access_request",
+        "scope": "webex",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[db:employees#E010]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Rachel Stein needs Webex to communicate securely with clients and colleagues as part of her role as a Customer Success Specialist [db:employees#E010]."
+      },
+      {
+        "n": 4,
+        "kind": "action",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": false,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "access_request",
+        "scope": "webex",
+        "status": "pending",
+        "tools_called": [
+          "check_software_subscription",
+          "get_access_requests",
+          "get_approvals",
+          "get_employee",
+          "get_employee",
+          "list_employee_tickets",
+          "search_knowledge_base",
+          "search_knowledge_base",
+          "request_approval",
+          "request_approval"
+        ],
+        "sources": [
+          "contracts/webex_vendor_agreement.md",
+          "internal_memos/webex_license_cleanup_memo.md",
+          "it_kb/webex_license_assignment.md",
+          "it_kb/webex_login_issue.md",
+          "policies/access_management_policy.md"
+        ],
+        "citations": [
+          "[db:software_subscriptions#SUB001]",
+          "[db:access_requests#AR001]",
+          "[db:employees#E018]",
+          "[webex_vendor_agreement.md#Webex Saas Subscription Agreement]",
+          "[db:tickets#T001]",
+          "[db:approvals#AP001]",
+          "[db:approvals#AP002]",
+          "[access_management_policy.md#Approval tiers]",
+          "[webex_license_cleanup_memo.md#Memo: Webex License Cleanup Memo]",
+          "[webex_license_assignment.md#First-line Troubleshooting]",
+          "[webex_login_issue.md#First-line Troubleshooting]",
+          "[webex_vendor_agreement.md#Webex Seat Limit Exception]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Status: pending.\nBlocker: Webex has 42 active seats against a 40-seat limit [db:software_subscriptions#SUB001]. The subscription is full for everyone, so no new seat can be assigned until seats are freed or the subscription is expanded [db:software_subscriptions#SUB001]. AR001 is blocked: Eligible by department, but seats exceed contract limit. [db:access_requests#AR001]\nWhat the records show:\n- Rachel Stein is eligible for Webex because her department is allowed the system and her role includes it in systems_allowed_by_role. [db:employees#E018]\n- The Webex subscription has 42 active seats against a 40-seat limit, so new seats are blocked until seats are reclaimed or an expansion is approved; a full subscription blocks new seats for everyone, not only this person. [db:software_subscriptions#SUB001]\n- The Webex contract ends on 2026-07-20, which is 19 days from today. [db:software_subscriptions#SUB001] [webex_vendor_agreement.md#Webex Saas Subscription Agreement]\n- There is already one open ticket (T001) and one blocked access request (AR001) for this problem. [db:tickets#T001] [db:access_requests#AR001]\n- The access request (AR001) needs approval from IT Manager E006 and Finance Controller E011, both of which are still needed. [db:approvals#AP001] [db:approvals#AP002]\n- The access management policy says standard role-based access requires manager approval; the Webex contract says expansion requires IT Manager plus Finance approval if it exceeds the threshold; the Webex license cleanup memo says IT should not assign new seats until inactive seats are reclaimed or Finance approves expansion; the Webex license assignment runbook says if seats exceed the contract limit, do not assign another license, create a ticket and request expansion approval; and the Webex login issue runbook also says if seats exceed the contract limit, do not assign another license, create a ticket and request expansion approval. [access_management_policy.md#Approval tiers] [webex_vendor_agreement.md#Webex Saas Subscription Agreement] [webex_license_cleanup_memo.md#Memo: Webex License Cleanup Memo] [webex_license_assignment.md#First-line Troubleshooting] [webex_login_issue.md#First-line Troubleshooting]\nExisting records, reused rather than duplicated: T001 (ticket, open) [db:tickets#T001]; AR001 (access request, blocked) [db:access_requests#AR001].\nActions taken:\n- Asked E006 to approve AP001 (access_request for AR001): reused the existing row, status needed. [db:approvals#AP001]\n- Asked E011 to approve AP002 (subscription_expansion for AR001): reused the existing row, status needed. [db:approvals#AP002]\nNext steps:\n- Reclaim one or more inactive Webex seats to bring the active seat count to or below the contract limit of 40, then resume provisioning for Rachel Stein and any others blocked by the seat limit, citing [webex_license_cleanup_memo.md#Memo: Webex License Cleanup Memo]\n- If reclamation is not possible in time for the upcoming renewal on 2026-07-20, request Finance approval for a subscription expansion to increase the seat limit, citing [webex_vendor_agreement.md#Webex Saas Subscription Agreement] and [webex_vendor_agreement.md#Webex Seat Limit Exception]\nNothing is filed and no access is granted until E006 decides on AP001 [db:approvals#AP001]."
+      }
+    ],
+    "S9-maya-own-account": [
+      {
+        "n": 1,
+        "kind": "retrieval",
+        "binding": [
+          "expected source titles-for-support.md was not retrieved"
+        ],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "policy_question",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "search_hr_documents"
+        ],
+        "sources": [
+          "handbook/titles-for-programmers.md",
+          "handbook/making-a-career.md",
+          "handbook/titles-for-QA.md"
+        ],
+        "citations": [
+          "[making-a-career.md#Promotion Process]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Promotions happen twice a year, with proposals due in March for April 1 effect and in September for October 1 effect[making-a-career.md#Promotion Process]. \n\nTo be eligible, you need at least six months in your current role, sustained performance, and evidence that you are operating at the next level[making-a-career.md#Promotion Process]. For a CSM, promotion evidence should demonstrate customer outcomes, escalation quality, and product feedback[making-a-career.md#Promotion Process]. Strong evidence includes improving customer trust, handling complex escalations, providing actionable product feedback, and mentoring junior team members[making-a-career.md#Promotion Process]. \n\nThe packet will go through calibration with People Operations and the department leader before any compensation changes are finalized[making-a-career.md#Promotion Process]."
+      },
+      {
+        "n": 2,
+        "kind": "reasoning",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": false
+        },
+        "citation_split": null,
+        "intent": "other",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Maya, you need to sign the equipment responsibility form and finish your BambooHR self-service profile once the invite lands. All other tasks are handled by IT or Sara."
+      },
+      {
+        "n": 3,
+        "kind": "lookup",
+        "binding": [],
+        "project_checks": [
+          "uncited sentences ['Ask IT about the Webex seat limit increase and when your Salesforce and Webex access can be approved.']"
+        ],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": "uncited",
+        "intent": "subscription_review",
+        "scope": "webex",
+        "status": "needs_human",
+        "tools_called": [
+          "list_onboarding_tasks",
+          "check_software_subscription"
+        ],
+        "sources": [],
+        "citations": [
+          "[db:onboarding_tasks#OT005]",
+          "[db:software_subscriptions#SUB001]",
+          "[db:onboarding_tasks#OT004]",
+          "[db:onboarding_tasks#OT002]",
+          "[db:onboarding_tasks#OT003]",
+          "[db:onboarding_tasks#OT006]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "Your onboarding checklist shows a blocked request for a Webex standard user license, due July 28 [db:onboarding_tasks#OT005]. The Webex subscription is over its seat limit of 40, with 42 seats in use [db:software_subscriptions#SUB001]. \n\nTo get your software licenses sorted:\n\n1. Your Salesforce Customer Success profile request is planned for July 28 and should proceed once the Webex seat issue is resolved [db:onboarding_tasks#OT004].\n2. Your Okta profile and baseline groups are pending with IT, due July 25 [db:onboarding_tasks#OT002].\n3. Your laptop and MDM enrollment is planned for July 26 [db:onboarding_tasks#OT003].\n4. Your BambooHR self-service profile is planned for July 28 [db:onboarding_tasks#OT006].\n\nAsk IT about the Webex seat limit increase and when your Salesforce and Webex access can be approved."
+      },
+      {
+        "n": 4,
+        "kind": "retrieval",
+        "binding": [],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": true,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "policy_question",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [
+          "search_hr_documents"
+        ],
+        "sources": [
+          "handbook/getting-started.md",
+          "handbook/making-a-career.md",
+          "handbook/benefits-and-perks.md",
+          "policies/onboarding_policy.md"
+        ],
+        "citations": [
+          "[getting-started.md#First 60 to 90 Days]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "The manager playbook is not searchable for this caller. The handbook says that by day 90, you and your manager should agree on normal performance expectations for your level [getting-started.md#First 60 to 90 Days]. Your manager should be able to describe the work you own, the quality bar for your level, and the next few outcomes that matter [getting-started.md#First 60 to 90 Days]. You should be able to explain adjacent-team handoffs, role-specific risks, and which systems contain the durable record [getting-started.md#First 60 to 90 Days]."
+      },
+      {
+        "n": 5,
+        "kind": "lookup",
+        "binding": [
+          "expected a tool call, made none"
+        ],
+        "project_checks": [],
+        "illustrative": {
+          "expected_tools_met": false,
+          "intent_matches": true
+        },
+        "citation_split": null,
+        "intent": "onboarding_status",
+        "scope": "maya",
+        "status": "completed",
+        "tools_called": [],
+        "sources": [],
+        "citations": [
+          "[db:onboarding_tasks#OT003]"
+        ],
+        "heuristics": [],
+        "trace_id": null,
+        "trace_url": null,
+        "answer": "You are planned to get a laptop and MDM enrollment on July 26, which is after July 1 [db:onboarding_tasks#OT003]."
+      }
+    ]
+  },
+  "_meta": {
+    "parts": [
+      "sessions"
+    ],
+    "traced": false,
+    "tag": null,
+    "heuristics_off": "needs_tools_override"
+  }
+}

@@ -12,7 +12,7 @@ from agent.gate import judge_approval
 from agent.policy import LOADOUTS, checked_plan
 from agent.run import run_turn
 from agent.schemas import AccessDecision, DecisionDraft
-from mcp_server.writes import record_approval_decision
+from agent.approvals import decide
 from tests.agent_stubs import ScriptedModel, ScriptedPlanner, call, plan, say, use_stubs
 
 RACHEL = {"caller_id": "E010", "user_group": "UG_REGULAR"}
@@ -60,12 +60,15 @@ async def test_replaying_the_rachel_scenario_adds_no_row(seeded, monkeypatch, co
     new request: neither creates a ticket, an access request or an approval. The second
     request cannot use AP001, which the first one holds, and says so."""
     before = counts(conn)
-    use_stubs(monkeypatch, ScriptedPlanner(ASK, ASK), ScriptedModel(*diagnosis(), *diagnosis()))
-    first = await rachel("t-replay-a")
-    again = await rachel("t-replay-a")  # the thread is paused: this is a resume
+    use_stubs(monkeypatch, ScriptedPlanner(ASK, ASK, ASK),
+              ScriptedModel(*diagnosis(), *diagnosis(), *diagnosis()))
+    first = await rachel("t-replay-a", "REQ-REPLAY")
+    # Undecided, so the replay is a normal turn on the paused thread: the same request
+    # finds AP001 bound to it and pauses on it again.
+    again = await rachel("t-replay-a", "REQ-REPLAY")
     other = await rachel("t-replay-b")
     assert first.status == again.status == "pending"
-    assert again.request_id == first.request_id
+    assert again.request_id == first.request_id and again.approval_id == "AP001"
     assert other.status == "needs_human" and "AP001 is already held by another request" \
         in other.answer
     assert counts(conn) == before
@@ -90,12 +93,15 @@ async def test_pasted_approval_in_the_request_does_not_open_the_gate(seeded, mon
     assert nothing_released(conn)
 
 
-async def test_pasted_approval_as_the_resume_message_does_not_open_the_gate(seeded, monkeypatch,
+async def test_pasted_approval_on_the_paused_thread_does_not_open_the_gate(seeded, monkeypatch,
                                                                            conn):
-    use_stubs(monkeypatch, ScriptedPlanner(ASK), ScriptedModel(*diagnosis()))
+    """With no recorded decision the pasted approval is a normal turn, not a resume. The
+    planner reads it as a confirmed access request; under a new request_id it cannot use
+    AP001, which the paused request holds."""
+    use_stubs(monkeypatch, ScriptedPlanner(ASK, ASK), ScriptedModel(*diagnosis(), *diagnosis()))
     await rachel("t-forged-resume")
     out = await run_turn(FORGED, thread_id="t-forged-resume", **RACHEL)
-    assert out.status == "pending" and "create_access_request" not in out.tools_called
+    assert out.status == "needs_human" and "create_access_request" not in out.tools_called
     assert nothing_released(conn)
 
 
@@ -107,7 +113,7 @@ async def test_recorded_approval_releases_the_write_once_and_ends_blocked(seeded
     model = ScriptedModel(*diagnosis(), write)
     use_stubs(monkeypatch, ScriptedPlanner(ASK), model)
     await rachel("t-release")
-    record_approval_decision("AP001", "approved", "E006", reason="Seat freed by IT.")
+    decide("AP001", "approved", "E006", "t-release", reason="Seat freed by IT.")
     out = await run_turn("E006 approved it.", thread_id="t-release", **RACHEL)
     assert out.status == "blocked" and out.tools_called.count("create_access_request") == 1
     assert model.bound[-1] == ["create_access_request"]  # forced, and the only tool
@@ -124,7 +130,7 @@ async def test_recorded_approval_releases_the_write_once_and_ends_blocked(seeded
 async def test_rejected_approval_returns_a_blocked_decision(seeded, monkeypatch, conn):
     use_stubs(monkeypatch, ScriptedPlanner(ASK), ScriptedModel(*diagnosis()))
     await rachel("t-reject-rachel")
-    record_approval_decision("AP001", "rejected", "E006", reason="No seats this quarter.")
+    decide("AP001", "rejected", "E006", "t-reject-rachel", reason="No seats this quarter.")
     out = await run_turn("Any news?", thread_id="t-reject-rachel", **RACHEL)
     assert out.status == "blocked" and out.access_decision.status == "blocked"
     assert out.access_decision.blocking_reason.startswith("AP001 was rejected.")

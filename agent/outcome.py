@@ -58,12 +58,14 @@ class TurnOutcome(BaseModel):
     intent: str | None = None
     visible_tools: list[str] = Field(default_factory=list)
     tools_called: list[str] = Field(default_factory=list)
+    tool_calls: list[dict] = Field(default_factory=list)  # {"name", "args"}, this turn, in order
     sources: list[str] = Field(default_factory=list)  # documents that reached the model
     approval_id: str | None = None
     approvals: list[str] = Field(default_factory=list)  # every approval this case requested
     checklist: OnboardingChecklist | None = None
     access_decision: AccessDecision | None = None
     handoff: dict | None = None  # {"handoff": WebexHandoff, "result": PendingAccessResult}
+    heuristics: list[str] = Field(default_factory=list)  # firings, agent/heuristics.py
 
 
 def tool_results(messages: list, name: str | None = None) -> list[dict]:
@@ -80,6 +82,12 @@ def tool_results(messages: list, name: str | None = None) -> list[dict]:
             if isinstance(decoded, dict):
                 out.append(decoded)
     return out
+
+
+def calls_made(messages: list) -> list[dict]:
+    """Every tool call in `messages`, by the model or by code, with its arguments."""
+    return [{"name": c["name"], "args": c["args"]} for m in messages
+            for c in (getattr(m, "tool_calls", None) or [])]
 
 
 def retrieved_sources(messages: list) -> list[str]:

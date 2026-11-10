@@ -9,8 +9,8 @@
                │  ├→ rearm → gather                (once, reads only)
                │  └→ refine → gather               (once: the checklist was never read)
                ├→ request_approval ─(already approved for this request)→ write_gate
-               │      └→ decide → await_approval (interrupt)
-               │                ↑ pending        │ resume
+               │      └→ decide → await_approval (interrupt) ←─ answer, while still awaiting
+               │                ↑ pending        │ resume (decision recorded)
                │                └── write_gate ←─┘
                │                     ├ approved → gather (the write, forced) → tools → decide → answer
                │                     ├ rejected → decide → answer
@@ -19,8 +19,8 @@
 
 Starting code: Lesson 10 `02-dynamic-tool-loadout/graph.py` and
 `03-history-distillation/graph.py` (plan → select → model ⇄ tools, rearm), the
-interrupt shape of Lesson 9 `03-human-in-the-loop/graph.py`, and the callback binding
-of Lesson 11 `02-instrument-agent/graph.py`. Changes:
+interrupt shape of Lesson 9 `03-human-in-the-loop/graph.py`, and the tracing of Lesson 11
+`02-instrument-agent/graph.py`. Changes:
 
 - `plan` and `select` are named `classify` and `scope`, the span names CLAUDE.md
   rule 2 fixes. `scope` also derives the assistant (`maya` or `webex`) from the intent.
@@ -46,6 +46,11 @@ of Lesson 11 `02-instrument-agent/graph.py`. Changes:
   the next model call is forced to the released write. Calls made by code go into the
   thread as tool call and result pairs, so they are cited, traced and listed like the
   model's, but they do not count against the model's per-turn cap.
+- Task #6: every node is a span and every model call a `model:<role>` generation
+  (agent/tracing.py) instead of Lesson 11's LangChain callback. A thread paused on an
+  approval with no decision yet runs a new message as a normal turn, then pauses on the
+  same approval again (`awaiting`, `after_answer`). The Webex decision cites every
+  document the case searches returned that bears on it, with one re-draft if it does not.
 """
 
 import json
@@ -57,7 +62,6 @@ from langchain_core.messages import (AIMessage, HumanMessage, RemoveMessage, Sys
                                      ToolMessage)
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import ToolException
-from langfuse.langchain import CallbackHandler
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.types import interrupt
@@ -76,9 +80,11 @@ from agent.policy import (APPROVAL_TOOL, CHECKLIST_TOOL, MAX_TOOL_CALLS, PLANNER
                           RELEASES, TurnPlan, checked_plan, missing_checklist, needs_approval,
                           rearm_tools, refine_note, visible_tools)
 from agent.ports import WEBEX_APPROVER
-from agent.records import CHECKLIST_PROMPT, DECISION_PROMPT, Validated
+from agent.records import (CHECKLIST_PROMPT, DECISION_PROMPT, Validated, documents_note,
+                           redraft_note)
 from agent.schemas import DecisionDraft, OnboardingChecklist
 from agent.structured import ParseFailed, parse_with_repair
+from agent.tracing import Traced, model_name_of, node
 
 KEEP_TURNS = 4          # earlier turns shown to the model, whole turns only
 TOOL_TEXT_CHARS = 3000  # per earlier tool result; the current turn's are never cut
@@ -153,6 +159,7 @@ class AgentState(TypedDict, total=False):
     turn_errors: list[str]
     approval: dict | None    # the request_approval row that gates the write (AP001)
     approvals: list[dict]    # every request_approval row of this case (AP001, AP002)
+    awaiting: dict | None    # the approval the thread is paused on, kept across later turns
     case: dict | None        # {employee_id, system, system_id, record_id} of the access case
     gate: dict | None        # the last GateDecision
     subject_note: str        # why lookup_subject verified nobody
@@ -311,12 +318,36 @@ def write_note(case: dict, approval: dict) -> str:
             "not grant access.")
 
 
+def case_documents(window: list) -> dict[str, list[str]]:
+    """Document file name -> the section labels tool results returned for it."""
+    documents: dict[str, list[str]] = {}
+    for label in sorted(known_labels(window)):
+        if ".md#" in label:
+            documents.setdefault(label[1:].split("#", 1)[0], []).append(label)
+    return documents
+
+
+def merged_draft(first: DecisionDraft, again: DecisionDraft) -> DecisionDraft:
+    """The first draft's facts, plus the re-draft's facts about documents the first one
+    did not cite; the re-draft's next steps only if one of them cites a document. A
+    re-draft that drops a precise row label keeps none of that loss."""
+    covered = first.documents_cited()
+    added = [f for f in again.observed_facts
+             if {c.label[1:].split("#", 1)[0] for c in f.citations if ".md#" in c.label}
+             - covered]
+    steps = again.recommended_next_steps if any(
+        ".md#" in step for step in again.recommended_next_steps) else first.recommended_next_steps
+    return first.model_copy(update={"observed_facts": [*first.observed_facts, *added],
+                                    "recommended_next_steps": steps})
+
+
 def decision_messages(window: list) -> list:
     """The forced draft's input: every message since the user opened the access case,
-    tool traffic as text."""
+    tool traffic as text, then the documents those results returned, by label."""
     return [SystemMessage(f"{DECISION_PROMPT}\nToday is {config.today().isoformat()}."),
             HumanMessage(f"Conversation and tool results:\n"
-                         f"{render_transcript(window, 10 ** 6)}")]
+                         f"{render_transcript(window, 10 ** 6)}\n\n"
+                         f"{documents_note(case_documents(window))}")]
 
 
 def from_message(messages: list, message_id: str | None) -> list:
@@ -390,18 +421,28 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
     tools = {t.name: t for t in as_langchain_tools(session, specs)}
     catalogue = sorted(tools)
     bound: dict[tuple, object] = {}
+    # Every model call is one `model:<role>` generation under the node that made it
+    # (agent/tracing.py). The models themselves carry no callbacks.
+    model_id = model_name_of(model)
 
-    def model_for(names: list[str]):
-        key = tuple(sorted(names))
+    def traced(runnable, role: str):
+        return None if runnable is None else Traced(runnable, role, model_id)
+
+    planner, distiller = traced(planner, "planner"), traced(distiller, "distiller")
+    checklist, decision = traced(checklist, "checklist"), traced(decision, "decision")
+
+    def model_for(names: list[str], role: str = "assistant"):
+        key = (role, *sorted(names))
         if key not in bound:
-            bound[key] = model.bind_tools([tools[n] for n in key]) if key else model
+            names = sorted(names)
+            bound[key] = traced(model.bind_tools([tools[n] for n in names]) if names
+                                else model, role)
         return bound[key]
 
     def mcp_config(config: RunnableConfig) -> dict:
-        # Only `configurable` goes to the tool. The node's callbacks would make the
-        # LangChain handler add a second span per call next to `tool:<name>`. They have
-        # to be replaced with [], because ensure_config() skips None and would inherit
-        # them from the running node's context.
+        # Only `configurable` goes to the tool. callbacks=[] keeps any LangChain
+        # callback in the node's context from adding a span next to `tool:<name>`;
+        # None would not, because ensure_config() skips None and inherits them.
         return {"configurable": config["configurable"], "callbacks": []}
 
     async def code_call(name: str, args: dict, config: RunnableConfig):
@@ -513,7 +554,7 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
         """The model bound to one tool it must call (Converse `toolChoice: tool`)."""
         key = ("force", name)
         if key not in bound:
-            bound[key] = model.bind_tools([tools[name]], tool_choice=name)
+            bound[key] = traced(model.bind_tools([tools[name]], tool_choice=name), "assistant")
         return bound[key]
 
     def model_calls(state: AgentState) -> int:
@@ -662,15 +703,22 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
         return finish(approval=gating, approvals=rows, case=case)
 
     def await_approval(state: AgentState) -> dict:
-        """The pause. interrupt() returns here when run_turn() resumes the thread. The
-        resume value carries no decision: the decision is the approvals row, which
-        application code wrote with record_approval_decision, and write_gate reads it."""
-        approval = state["approval"]
+        """The pause, after the turn that asked for the approval and again after every
+        later turn while no decision is recorded. interrupt() returns here only when
+        run_turn() resumes the thread, which it does once the approvals row holds a
+        decision (agent/approvals.py); write_gate then reads that row. The turn that
+        paused may be several turns back, so its plan, case and approval come back
+        from `awaiting`."""
+        waiting = state["awaiting"]
+        approval = waiting["approval"]
         interrupt({"approval_id": approval["approval_id"], "record_id": approval["request_id"],
-                   "approver_id": approval["approver_id"], "request_id": state["request_id"],
-                   "also_requested": [a["approval_id"] for a in state.get("approvals") or []
+                   "approver_id": approval["approver_id"], "request_id": waiting["request_id"],
+                   "also_requested": [a["approval_id"] for a in waiting["approvals"]
                                       if a["approval_id"] != approval["approval_id"]]})
-        return {}
+        plan = waiting["plan"]
+        return {"approval": approval, "approvals": waiting["approvals"], "case": waiting["case"],
+                "decision_from": waiting["decision_from"], "plan": plan,
+                "intent": plan["intent"], "scope": waiting["scope"]}
 
     async def write_gate(state: AgentState, config: RunnableConfig) -> dict:
         approval = state["approval"]
@@ -681,6 +729,8 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
                                        record_id=approval["request_id"],
                                        approval_id=approval["approval_id"], replay=replay)
         update = {"gate": asdict(decision), "decided": False}
+        if decision.state != "pending":
+            update["awaiting"] = None  # decided: the thread no longer waits on it
         if decision.open:
             released = [n for n in decision.released if n in tools]
             update.update(visible_tools=released, force=released[0] if released else "",
@@ -697,15 +747,39 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
         case = state["case"]
         window = from_message(state["messages"], state.get("decision_from"))
         known = known_labels(state["messages"])
-        draft = await parse_with_repair(Validated(decision, DecisionDraft, known),
-                                        decision_messages(window), DecisionDraft)
+        drafter = Validated(decision, DecisionDraft, known)
+        messages = decision_messages(window)
+        draft = await parse_with_repair(drafter, messages, DecisionDraft)
+        documents = case_documents(window)
+        missing = sorted(set(documents) - draft.documents_cited())
+        unlabelled = bool(documents) and not any(
+            ".md#" in step for step in draft.recommended_next_steps)
+        if missing or unlabelled:
+            # Task #6: a document the case searches returned and the draft never cites
+            # (the Rachel trace cited 2 of 5), or next steps with no document behind
+            # them. One more draft, asked to cover them; if it does not validate, the
+            # first draft stands. Costs one model call.
+            again = await drafter.ainvoke(
+                messages + [HumanMessage(redraft_note(missing, unlabelled))])
+            if again.get("parsed") is not None:
+                draft = merged_draft(draft, again["parsed"])
         record = webex.assemble_decision(draft, messages=window, employee_id=case["employee_id"],
                                          system=case["system"], system_id=case["system_id"],
                                          gate=state.get("gate"))
         text = webex.render_decision(record, state.get("approval"), state.get("gate"))
         valid, _ = cited_labels(text, known)
-        return {"decision": record.model_dump(), "answer": text, "status": record.status,
-                "citations": valid, "decided": True, "messages": [AIMessage(content=text)]}
+        update = {"decision": record.model_dump(), "answer": text, "status": record.status,
+                  "citations": valid, "decided": True, "messages": [AIMessage(content=text)]}
+        if record.status == "pending":
+            # What a resume needs, several turns later: the turns in between replace
+            # plan, case and approval in state, and the server binds the approval to
+            # the request_id that asked for it.
+            update["awaiting"] = {
+                "approval": state["approval"], "approvals": state.get("approvals") or [],
+                "case": case, "decision_from": state.get("decision_from"),
+                "plan": state["plan"], "scope": state.get("scope"),
+                "request_id": state["request_id"], "trace_id": state.get("trace_id")}
+        return update
 
     async def cite(state: AgentState) -> dict:
         """Every fact-stating sentence on a turn with tool results must carry a label.
@@ -722,7 +796,7 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
         missing = uncited_sentences(draft)
         if not (missing or invented):
             return {"draft": draft}
-        repaired = await model_for([]).ainvoke(
+        repaired = await model_for([], role="citation_repair").ainvoke(
             repair_messages(state, draft, missing, invented))
         text = message_text(repaired)
         return {"draft": text, "uncited": uncited_sentences(text),
@@ -817,6 +891,11 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
     def after_decide(state: AgentState) -> str:
         return "await_approval" if state["status"] == "pending" else "answer"
 
+    def after_answer(state: AgentState) -> str:
+        """A turn on a thread that still waits on an approval pauses on it again, so the
+        next message after a recorded decision resumes it."""
+        return "await_approval" if state.get("awaiting") else END
+
     def after_gate(state: AgentState) -> str:
         gate = state["gate"]
         if gate["open"]:
@@ -826,23 +905,23 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
         return "decide" if gate["state"] == "rejected" else "answer"
 
     graph = StateGraph(AgentState)
-    graph.add_node("distil", distil)
-    graph.add_node("classify", classify)
-    graph.add_node("lookup_subject", lookup_subject)
-    graph.add_node("scope", scope)
-    graph.add_node("gather", gather)
-    graph.add_node("tools", run_tools)
-    graph.add_node("rearm", rearm)
-    graph.add_node("refine", refine)
-    graph.add_node("request_approval", request_approval)
-    graph.add_node("await_approval", await_approval)
-    graph.add_node("write_gate", write_gate)
-    graph.add_node("decide", decide)
-    graph.add_node("handoff", handoff)
-    graph.add_node("unverified", unverified)
-    graph.add_node("cite", cite)
-    graph.add_node("checklist", make_checklist)
-    graph.add_node("answer", answer)
+    graph.add_node("distil", node("distil", distil))
+    graph.add_node("classify", node("classify", classify))
+    graph.add_node("lookup_subject", node("lookup_subject", lookup_subject))
+    graph.add_node("scope", node("scope", scope))
+    graph.add_node("gather", node("gather", gather))
+    graph.add_node("tools", node("tools", run_tools))
+    graph.add_node("rearm", node("rearm", rearm))
+    graph.add_node("refine", node("refine", refine))
+    graph.add_node("request_approval", node("request_approval", request_approval))
+    graph.add_node("await_approval", node("await_approval", await_approval))
+    graph.add_node("write_gate", node("write_gate", write_gate))
+    graph.add_node("decide", node("decide", decide))
+    graph.add_node("handoff", node("handoff", handoff))
+    graph.add_node("unverified", node("unverified", unverified))
+    graph.add_node("cite", node("cite", cite))
+    graph.add_node("checklist", node("checklist", make_checklist))
+    graph.add_node("answer", node("answer", answer))
 
     graph.add_conditional_edges(START, after_start, ["distil", "classify"])
     graph.add_edge("distil", "classify")
@@ -864,9 +943,8 @@ def build_graph(session, specs: list, checkpointer, *, model, planner, distiller
     graph.add_edge("await_approval", "write_gate")
     graph.add_conditional_edges("write_gate", after_gate,
                                 ["gather", "await_approval", "decide", "answer"])
-    graph.add_edge("answer", END)
+    graph.add_conditional_edges("answer", after_answer, ["await_approval", END])
 
-    # The Langfuse callback is bound to the compiled graph (Lesson 11), so every node
-    # and model call is exported whoever invokes it. CLAUDE.md rule 2: never remove it.
-    return graph.compile(checkpointer=checkpointer).with_config(
-        {"callbacks": [CallbackHandler()]})
+    # Tracing is in the graph itself: every node is a span and every model call a
+    # generation (agent/tracing.py), whoever invokes it. CLAUDE.md rule 2.
+    return graph.compile(checkpointer=checkpointer)

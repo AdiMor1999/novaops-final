@@ -39,8 +39,14 @@ One LangGraph graph serves both scopes. Starting code:
 
 - Approval waits use `interrupt()`. The checkpointer (`AsyncSqliteSaver`) is injected from
   outside `build_graph()`. Never construct one inside the graph module.
-- Application code writes the approval decision to `approvals` before resuming with
-  `Command(resume=...)`. The resume continues the same thread and the same trace.
+- Application code writes the approval decision with `agent.approvals.decide()`, which
+  leaves an `approval_decision` trace in the thread's session. `run_turn()` resumes with
+  `Command(resume=...)` only when the approval row holds a decision. The resume continues
+  the same thread, the pausing request_id and the pausing turn's trace.
+- While no decision is recorded, a new message on the paused thread is a normal turn with
+  its own request_id and status. The graph then pauses on the same approval again
+  (`awaiting` in state, `after_answer`). `tools_called` lists only the current turn's tools,
+  a resume included.
 
 ## Outputs
 

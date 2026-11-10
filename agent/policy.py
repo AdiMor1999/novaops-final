@@ -33,6 +33,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from agent import heuristics
+
 Intent = Literal[
     "policy_question",
     "employee_lookup",
@@ -263,12 +265,16 @@ def checked_plan(plan: TurnPlan, has_history: bool, message: str = "",
     field's description names that case. Setting it routes the turn to the approval
     request, which only reuses or creates a pending row; it opens no write."""
     request = message.strip().split("\n\n")[0]
-    if not plan.action_confirmed and self_access_request(plan, request, caller_id):
+    if not plan.action_confirmed and heuristics.enabled("self_access_confirmation") \
+            and self_access_request(plan, request, caller_id):
+        heuristics.fired("self_access_confirmation")
         plan = plan.model_copy(update={"action_confirmed": True, "needs_tools": True,
                                        "subject_employee_id": caller_id})
     if plan.needs_tools or plan.intent == "other":
         return plan
-    if not has_history or CURRENT_STATE.search(request):
+    if heuristics.enabled("needs_tools_override") \
+            and (not has_history or CURRENT_STATE.search(request)):
+        heuristics.fired("needs_tools_override")
         return plan.model_copy(update={"needs_tools": True})
     return plan
 

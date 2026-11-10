@@ -118,7 +118,7 @@ def seat_blocker(sub: dict | None) -> str | None:
     return (f"{sub['system_name']} has {sub['active_seats']} active seats against a "
             f"{sub['seat_limit']}-seat limit {sub['citation']}. The subscription is full "
             "for everyone, so no new seat can be assigned until seats are freed or the "
-            "subscription is expanded.")
+            f"subscription is expanded {sub['citation']}.")
 
 
 def _citation(row: dict) -> EvidenceCitation:
@@ -222,8 +222,10 @@ def _with_labels(statement: str, labels: list[str]) -> str:
 
 def closing_line(decision: AccessDecision, approval: dict | None, gate: dict | None) -> str:
     if decision.status == "pending" and approval:
+        # Cited like every other fact sentence: the approval row says who decides.
+        label = f" {approval['citation']}" if approval.get("citation") else ""
         return (f"Nothing is filed and no access is granted until {approval['approver_id']} "
-                f"decides on {approval['approval_id']}.")
+                f"decides on {approval['approval_id']}{label}.")
     if gate and gate["state"] == "rejected":
         return "Nothing was filed, and no access is granted."
     if decision.status == "blocked":

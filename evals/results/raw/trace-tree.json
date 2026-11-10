@@ -1,0 +1,5 @@
+[
+  {"turn": "S1 turn 1 (policy question)", "before": 24, "before_trace": "e391001f48ca3f387de06c7c9a8f771d", "after": 14, "after_trace": "fa1fa09e5d9282f9833a812e621b1c78"},
+  {"turn": "S1 turns 2 to 4 (no tool call)", "before": "not measured", "before_trace": "-", "after": 8, "after_trace": "e5f2b8824315ee7c8b90b414925fde2e"},
+  {"turn": "Rachel (pauses on AP001)", "before": 93, "before_trace": "f7b0d2f0d96bf91072c2f360a4fb42c3", "after": 55, "after_trace": "b8645aedf9bf40991d377199c0cc5276"}
+]

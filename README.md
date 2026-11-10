@@ -48,7 +48,17 @@ the file. A claim without a file is not made.
 | Webex returns a validated `AccessDecision` (observed facts, reused records, actions taken, next steps, blocking reason, status) that cannot say access was granted | `agent/schemas.py`, `agent/records.py`, `agent/webex.py`, `agent/graph.py` (`decide`) | done (task #5) |
 | A confirmed access request for someone the thread never looked up is looked up by code: one match routes, none or several end `needs_human` | `agent/handoff.py`, `agent/graph.py` (`lookup_subject`), `tests/test_maya.py` | done (task #5) |
 | `S6`, `S7` and `S8` replay with binding checks plus the write-gate checks (turn 3 files nothing, turn 4 pauses on reused AP001 and AP002, no new row over the session) | `evals/run_session.py`, `evals/session_checks.py` | done (task #5) |
-| Deterministic checks and LLM judges score the golden sessions | `evals/` | planned (task #6) |
+| A trace reads `turn` → one span per graph node → `model:<role>` generations (model id, tokens, cost) and `tool:<name>` spans, with no anonymous LangChain runnables; a check fetches a trace and asserts the shape | `agent/tracing.py`, `agent/mcp_tools.py`, `evals/trace_tree.py`, `tests/test_observability.py` | done (task #6) |
+| One command runs every deterministic check over all of `GOLDEN-DATASETS.json` (sessions, single-turn cases, retrieval expectations, rubrics), binding fields first; `--selftest` runs offline | `evals/score.py`, `evals/session_checks.py`, `evals/conversation_checks.py`, `evals/tool_map.py` | done (task #6) |
+| Each scored turn's trace gets two BOOLEAN scores, `binding` and `project_checks`, whose comments list the failed fields | `evals/score.py` (`push_scores`) | done (task #6) |
+| Turn-1 constraint still binds late (S4), a closed branch stops driving tools (S3), every claim is cited (all sessions) | `evals/conversation_checks.py` | done (task #6) |
+| Replay idempotency, restart survival of a pending approval, the gate opening only on a recorded approval, and the recorded-approval resume run as scenario scripts that each leave a trace (`eval:durability`); the pytest tests call them | `evals/durability.py`, `tests/test_approval.py` | done (task #6) |
+| Approval decisions are recorded by one application function under an `approval_decision` span in the thread's session; the resumed `write_gate` span shows the row it read | `agent/approvals.py`, `evals/durability.py` (`resume`) | done (task #6) |
+| While a paused thread's approval has no decision, a new message is a normal turn and the thread stays paused; the resume happens only after a recorded decision; `tools_called` lists only the turn's own tools | `agent/run.py`, `agent/graph.py` (`awaiting`, `after_answer`), `tests/test_approval.py` | done (task #6) |
+| A Webex answer cites every expected document that reached the model, and its next steps give the documents' options with their labels | `agent/records.py`, `agent/graph.py` (`decide`, `merged_draft`), `evals/webex_cases.py` (`document_citations`) | done (task #6) |
+| The five heuristics added after live runs each have an off switch and record every firing in the trace | `agent/heuristics.py`, `evals/ablate.py`, `tests/test_observability.py` | done (task #6) |
+| Two LLM judges (citation quality, access overclaim) run as Langfuse-managed evaluators on `eval:baseline` and `eval:final` traces only | `evals/register_judges.py`, `evals/judge-iam-policy.json` | done (task #6) |
+| Measured numbers: S6 to S8 delta, retrieval hit rate, S9 turn 1, the `needs_human` citation split, heuristic ablations, Rachel before and after, S4 before and after | `evals/results/results.md`, `evals/results/README.md`, `evals/results/raw/` | done (task #6) |
 | Evaluation run and submission | `SUBMISSION.md` | planned (task #11) |
 
 ## Stack
@@ -80,6 +90,21 @@ python -m pytest -q                   # integration tests skip without AWS crede
 
 `agent.ask` calls `run_turn()`; there is no other way into the workflow.
 
+Evaluation (task #6). Tracing is off unless `--trace` is passed; graded and baseline runs
+are traced.
+
+```sh
+python -m evals.score --selftest                       # offline: no model, MCP or Langfuse
+python -m evals.score --trace --tag eval:baseline --out evals/results/raw/baseline-1.json
+python -m evals.durability --trace                     # four scenarios, tagged eval:durability
+python -m evals.webex_cases rachel --repeat 3 --trace --tag eval:rachel --out r.json
+python -m evals.trace_tree <trace_id> --show           # assert the readable trace shape
+python -m evals.ablate --repeat 3 --code <frozen copy> # heuristic ablations, tracing off
+python -m evals.register_judges --dry-run              # then without flags (paused), then --enable
+python -m evals.report --units                         # evals/results/results.md
+python -m evals.usage                                  # Langfuse units this billing period
+```
+
 ## Starting code
 
 Every module started as a copy of lesson lab code and was changed here. Nothing imports from
@@ -105,7 +130,16 @@ the lesson folders. Rows are added as each module is copied.
 | `agent/graph.py` | `lesson-10-context-engineering/code/02-dynamic-tool-loadout/graph.py`, `03-history-distillation/graph.py`; `lesson-09-agentic-frameworks/code/03-human-in-the-loop/graph.py` (`human_review`); `lesson-11-observability-and-evals/code/02-instrument-agent/graph.py` (callback) | `plan`/`select`/`model` become `classify`/`scope`/`gather`. The checkpointer is a parameter. Our `tools` node calls `as_langchain_tools()` instead of `ToolNode`, caps calls at 6 and refuses tools not visible this turn. Approval path: `request_approval` (code calls the MCP tool) → `await_approval` (`interrupt()`) → `write_gate` (`release_write()`). Earlier turns reach the model as text, because Bedrock refuses `toolUse` blocks in a call that binds no tools. Task #4 adds `distil` (Lesson 10 stage 3), `handoff`/`unverified`, `refine`, `cite` and `checklist`. |
 | `agent/memory.py` | `lesson-10-context-engineering/code/03-history-distillation/stage03_policy.py` | `ConversationMemory`, thresholds and `memory_is_safe` unchanged. The token estimate is inlined. A distiller parse failure is repaired once, then the memory is rejected and the raw history kept. |
 | `agent/webex.py` | `lesson-11-observability-and-evals/homework/README.md` milestone 2 (the Webex cases: seat-limit block, reuse of T001, approval not given yet, a refusal) | New module. Pure functions over tool results: which approvals to request, the status, the blocking reason, reused records, actions taken and the rendered answer. |
-| `tests/approval_process.py` | `lesson-09-agentic-frameworks/homework/` task 3 (durable approval across a restart) | Three phases in separate processes: the Rachel scenario until the pause (then SIGKILL), the resume after `record_approval_decision`, and a replay of the same request. |
+| `evals/durability.py` (was `tests/approval_process.py`) | `lesson-09-agentic-frameworks/homework/` task 3 (durable approval across a restart) | Task #6: four scenarios (restart, replay, gate, resume) through `run_turn()` on the real file DB, each leaving a trace tagged `eval:durability`. The restart scenario still runs the pause (then SIGKILL), the decision and the resume in separate processes. Decisions go through `agent.approvals.decide()`. |
+| `agent/tracing.py` | `lesson-11-observability-and-evals/code/02-instrument-agent/graph.py` (the `CallbackHandler` it replaces) | Our own span per node and `model:<role>` generation per model call, so the tree has no anonymous runnables and tool spans nest under the node that called them. The `trajectory` digest on the root span follows `04-llm-judge/evaluator-judges.py`. |
+| `agent/approvals.py` | none (new) | `decide()` records an approval decision under an `approval_decision` span in the thread's session; `is_decided()` tells `run_turn()` whether to resume. |
+| `agent/heuristics.py` | none (new) | Off switches (`NOVAOPS_HEURISTICS_OFF`) and firing records for the five post-live-run heuristics. |
+| `evals/score.py` | `lesson-11-observability-and-evals/code/03-score-the-run/{checks,score}.py` | Scores from the `TurnOutcome` in memory as each turn ends, two BOOLEAN scores per turn instead of ten, all four parts of the golden dataset, `--selftest` on synthetic outcomes against the real golden rows. |
+| `evals/conversation_checks.py` | `lesson-10-context-engineering/code/evals/checks.py` | New checks: S4 constraint carry, S3 closed branch, citations on every turn, the `needs_human` citation split. |
+| `evals/register_judges.py` | `lesson-11-observability-and-evals/code/04-llm-judge/evaluator-judges.py` | Our two rubrics, versioned names, a tag filter (`eval:baseline`, `eval:final`), the SDK's HTTP client, and `--test` (one judgement through the connection). |
+| `evals/trace_tree.py` | `lesson-11-observability-and-evals/code/03-score-the-run/score.py` (`_observations`) | Reads a trace through the v2 observations API (the legacy one returns 410) and asserts the readable shape. |
+| `evals/report.py`, `evals/ablate.py`, `evals/usage.py` | `lesson-10-context-engineering/code/evals/compare.py` | Binding pass rates per session and the S6 to S8 delta, heuristic ablations in parallel workers, Langfuse units from the v2 metrics API. |
+| `scripts/register_model_prices.py` | none (new) | Registers Nova 2 Lite's published price as a Langfuse model, so generations show cost. |
 | `agent/schemas.py`, `agent/ports.py`, `agent/handoff.py` | `lesson-10-context-engineering/homework/README.md` milestones 3 and 4 (`CallerContext`, `EvidenceCitation`, `OnboardingChecklist`, `WebexHandoff`, `WebexPort` and fake) | Retrieval stays behind MCP (spec §6.1) instead of an in-graph `EvidenceRetriever`. The real port calls `request_approval` over MCP. Routing on the subject's record is ours. |
 | `agent/records.py` | Lesson 3 tool forcing; `parse_with_repair` from `agent/structured.py` | `submit_checklist` as a forced tool; local Pydantic validation plus a check that every label came from a tool. |
 | `evals/run_session.py`, `evals/session_checks.py` | `lesson-10-context-engineering/code/evals/{runner,checks,evalrules}.py` | Replays through `run_turn()` on one thread, reseeds once per session, request id `<session>-t<n>`. Only binding fields are enforced, plus project checks (turn-9 precedence, closed branch, handoff-only turn 10, no playbook for S9). |
@@ -211,8 +245,78 @@ Each decision names the lesson principle behind it. "Ours" marks a decision no l
 
 | Decision | Lesson principle |
 | --- | --- |
-| Langfuse callback on the compiled graph. Spans `classify`, `scope`, `tool:<name>`, `write_gate`, `answer`. `flush()` on exit. | L11, L14 |
+| Our own span per graph node, a `model:<role>` generation per model call and a `tool:<name>` span per tool call, instead of the LangChain callback, which stored nine anonymous runnables per structured-output call and attached tool spans to the root. Rachel's turn fell from 93 observations to 55. `flush()` on exit. | L11, L14 |
+| The judges run in Langfuse, so their scores sit on the traces graders open; the Bedrock connection behind them uses a dedicated IAM user that may only invoke Nova Pro (`evals/judge-iam-policy.json`). | L11, L13 |
+| Development and ablation runs trace nothing; baseline, Rachel, durability and graded runs are traced and tagged. Each trace, observation and score is a Langfuse unit, and Hobby stops at 50,000 a month. | Ours |
 | Deterministic checks first, judges second. Illustrative golden fields mapped to our tool names once, in `evals/tool_map.py`. | L11, L8 |
 | Project checks under `evals/`: constraint carry, closed branch, citations, replay, durable pause, write gate. | L11, spec §12 |
 | Develop on `GOLDEN-DATASETS.json`. `EVALUATION-INPUTS.yaml` runs once with a fresh seed per case. | L11, L12 |
 | Root and nested `CLAUDE.md`, a hook protecting eval targets and fixtures. | L5, L12 |
+
+## Heuristics
+
+Five rules were added after live runs, because a run failed without them. Each one changes
+behaviour beyond the brief, so each has an off switch (`NOVAOPS_HEURISTICS_OFF=<name>`,
+`agent/heuristics.py`) and records every firing in the turn's trace (`heuristics_fired` on
+the root span) and on `TurnOutcome.heuristics`. How often each fires, and what changes
+with it off over three full golden replays, is in `evals/results/results.md` ("Heuristics");
+`evals/results/README.md` reads it. In short: `needs_tools_override` is worth 6 points of
+binding pass rate (S2 turn 3, S9 turns 1 and 5 fail without it), `fuzzy_name_lookup` 4
+(S7 and S8's "rrachel stein"), `title_chunk_demotion` 3 (S8 turn 1), and
+`self_access_confirmation` fires on no golden turn but on every Rachel run, which fails
+its whole rubric without it.
+
+`citation_brace_repair` has no measurable effect. With it off, the binding pass rate over
+three replays is 90%, the same as with it on. One turn (S7 turn 4) failed 2 of 3 runs
+without it, but that is too few runs to call it an effect. It is kept anyway: it fires
+on 3% of session turns and on every Rachel run. It only rewrites `{`/`}` to brackets and
+splits packed labels, and every label is still checked against tool results. Without
+it, such a draft costs a repair call or ends in `ParseFailed`. That cost is not what the
+binding checks measure.
+
+| Heuristic | Where | What it does | Why it was added |
+| --- | --- | --- | --- |
+| `needs_tools_override` | `agent/policy.py` (`checked_plan`) | Sets `needs_tools` on a first turn, or when the request asks for the current state ("right now") | Nova Lite planned no lookup for S9 turn 1 on every try, and S2 turn 3 answered from a stale snapshot (task #4) |
+| `self_access_confirmation` | `agent/policy.py` (`checked_plan`) | Counts an employee's own first-person access request as confirmed, unless it says not to file | Nova Lite left `action_confirmed` false on the Rachel scenario (task #5) |
+| `title_chunk_demotion` | `mcp_server/retrieval.py` (`diverse`) | Drops a document's header-only chunk when a content chunk of it is a candidate | S8 turn 1 answered "the steps are in the article" from the header on four runs of five (task #5) |
+| `citation_brace_repair` | `agent/schemas.py` (`ObservedFact`) | Turns `{`/`}` typed for brackets into brackets and splits packed labels; every label is still checked against tool results | The Rachel decision and S6 turn 4 failed validation on the same typo twice (task #5) |
+| `fuzzy_name_lookup` | `mcp_server/server.py` (`get_employee`) | Returns the employee a misspelt full name is a typo of, marked `match: similar` | "rrachel stein" found nobody (task #5) |
+
+## Judges
+
+Two LLM judges score each baseline and final turn: `citation_quality` (does each label
+support its claim) and `access_overclaim` (does the answer claim access was granted or
+overstate what was done). They run as Langfuse-managed evaluators, registered from
+`evals/register_judges.py` with the rubrics in code, on Amazon Nova Pro at temperature 0
+(the v2 evaluator API cannot set it, so it is set on each evaluator in the Langfuse UI and
+checked on the judge's own generation).
+Langfuse reaches Bedrock through a dedicated IAM user that may only invoke Nova Pro
+(`evals/judge-iam-policy.json`); the project's main keys never go to Langfuse. Rules fire
+only on traces tagged `eval:baseline` or `eval:final`. One disagreement between a judge
+and a deterministic check is written up in `evals/results/README.md`. On the 315
+baseline turns, `citation_quality_v1` scored 301 (average 0.870) and `access_overclaim_v1`
+scored 298 (average 0.973). The rest failed because Bedrock throttled Nova Pro while five
+replays ran in parallel.
+
+## Known limitations
+
+Measured in task #6 and left in place, so the final evaluation (#11) runs on the code
+that was measured (agent-code hash `4be5448af0f4`). Neither was tuned against.
+
+- **Invented labels on turns with no tool call.** When a turn answers from the
+  conversation alone, Nova Lite sometimes ends a sentence with a bracketed label no tool
+  returned, such as `[citation]`, `[constraint]` or `[established facts]`, although the
+  prompt forbids exactly these. The citation check catches it, and the turn ends
+  `needs_human`. It is the largest single cause of `needs_human`: 17 of 31 such turns
+  over five baseline replays (S4 turns 1, 5 and 7 are typical).
+- **SIMPLE_004 never retrieves `it_kb/webex_login_issue.md`.** For "Webex support SLA",
+  retrieval returns the vendor agreement (with its "Support SLA" section) but ranks the
+  licence-assignment article and the cleanup memo above the login-issue article, in all
+  five runs. That case's hit rate is 0.50; overall, 80 of 85 expected documents come back.
+- **Two gaps in the citation check** (`agent/outcome.py`, `needs_citation`), found by the
+  judge comparison: a line ending in a colon counts as a heading and is not checked
+  (SIMPLE_005's false "Three SaaS contracts expire within the next 30 days:"), and an
+  instruction that restates a cited step counts as an uncited fact (S5 turn 1).
+- **Judge coverage under parallel load.** Running five replays at once made Bedrock
+  throttle Nova Pro, and 14 and 17 of 315 turns went unjudged. Run #11's replays one
+  after another.

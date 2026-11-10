@@ -7,7 +7,8 @@ GOLDEN-DATASETS.json:
 
 - every `must_include` item maps to one check on the AccessDecision or the outcome;
 - every `must_not_include` item maps to a check on the answer and the actions;
-- every `expected_documents` path must be among the documents that reached the model.
+- every `expected_documents` path must be among the documents that reached the model;
+- every expected document that reached the model is cited in the answer (task #6).
 
 The team seat question (spec §13) is a second case: a manager asks which of her team
 holds a Webex seat. The database records seat counts, not holders, so the answer must
@@ -15,6 +16,7 @@ say that seat assignments are not recorded, from the tool result that says so.
 
     python -m scripts.reseed && python -m mcp_server &
     python -m evals.webex_cases rachel team --out report.json
+    python -m evals.webex_cases rachel --repeat 3 --trace --tag eval:rachel --out r.json
 
 Exit code 1 if any check fails. The database is reseeded before each case.
 """
@@ -22,6 +24,7 @@ Exit code 1 if any check fails. The database is reseeded before each case.
 import argparse
 import asyncio
 import json
+import os
 import re
 import sys
 import uuid
@@ -101,6 +104,21 @@ def expected_documents(outcome) -> dict[str, bool]:
                       for s in outcome.sources) for path in paths}
 
 
+def document_citations(outcome) -> dict[str, bool]:
+    """Task #6: every expected document that reached the model is cited by at least one
+    `[<file>#<section>]` label in the answer. A document the case searches returned is
+    evidence the decision rests on, so it is treated as used. Whether the cited section
+    supports its claim is the citation-quality judge's question, not this check's."""
+    paths = golden("retrieval_expectations", RUBRIC)["expected_documents"]
+    reached = [p.removeprefix("documents/") for p in paths
+               if any(source_matches(p.removeprefix("documents/"), s) for s in outcome.sources)]
+    cited = {path: any(c.startswith(f"[{path.rsplit('/', 1)[-1]}#") for c in outcome.citations)
+             for path in reached}
+    steps = outcome.access_decision.recommended_next_steps if outcome.access_decision else []
+    cited["a next step gives an option from a document"] = any(".md#" in s for s in steps)
+    return cited
+
+
 def rachel_checks(outcome) -> dict[str, dict[str, bool]]:
     rubric = golden("golden_rubrics", RUBRIC)
     include, exclude = must_include(outcome), must_not_include(outcome)
@@ -108,7 +126,8 @@ def rachel_checks(outcome) -> dict[str, dict[str, bool]]:
             or set(exclude) != set(rubric["must_not_include"]):
         raise ValueError(f"{RUBRIC} items changed; update the checks in evals/webex_cases.py")
     return {"must_include": include, "must_not_include": exclude,
-            "expected_documents": expected_documents(outcome)}
+            "expected_documents": expected_documents(outcome),
+            "document_citations": document_citations(outcome)}
 
 
 def team_checks(outcome) -> dict[str, dict[str, bool]]:
@@ -151,13 +170,19 @@ async def run_case(name: str) -> dict:
             "outcome": outcome.model_dump()}
 
 
-async def main(names: list[str], out: str | None) -> int:
-    report = [await run_case(name) for name in names]
+async def main(names: list[str], out: str | None, *, repeat: int = 1,
+               tag: str | None = None) -> int:
+    from langfuse import get_client, propagate_attributes
+    try:
+        with propagate_attributes(tags=[tag] if tag else None):
+            report = [await run_case(name) for _ in range(repeat) for name in names]
+    finally:
+        get_client().flush()
     if out:
         with open(out, "w", encoding="utf-8") as handle:
             json.dump(report, handle, indent=2, default=str)
     failed = sum(len(r["failed"]) for r in report)
-    print(f"\n{failed} check(s) failed")
+    print(f"\n{failed} check(s) failed over {len(report)} run(s)")
     return 1 if failed else 0
 
 
@@ -165,5 +190,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("cases", nargs="+", choices=sorted(CASES))
     parser.add_argument("--out")
+    parser.add_argument("--repeat", type=int, default=1)
+    parser.add_argument("--trace", action="store_true",
+                        help="trace the runs; off by default (CLAUDE.md rule 2)")
+    parser.add_argument("--tag", help="trace tag, e.g. eval:rachel")
     args = parser.parse_args()
-    sys.exit(asyncio.run(main(args.cases, args.out)))
+    os.environ["LANGFUSE_TRACING_ENABLED"] = "true" if args.trace else "false"
+    sys.exit(asyncio.run(main(args.cases, args.out, repeat=args.repeat, tag=args.tag)))

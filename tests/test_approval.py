@@ -1,16 +1,12 @@
 """The write gate and the durable approval pause."""
 
-import json
-import signal
-import subprocess
-import sys
-
 import pytest
 
 from agent.gate import judge_approval, release_write
 from agent.run import RequestIdMismatch, run_turn
 from tests.agent_stubs import ScriptedModel, ScriptedPlanner, call, memory_session, plan, say, use_stubs
-from tests.conftest import REPO
+from agent.approvals import decide
+from evals import durability
 
 # A confirmed access request goes anywhere only for a subject a get_employee row in the
 # thread verifies (agent/handoff.py), so each approval test looks Rachel up first.
@@ -64,66 +60,45 @@ def test_gate_opens_only_the_write_its_approval_type_releases():
     assert judge_approval({**row, "request_type": "subscription_expansion"}, TODAY).released == []
 
 
-def _phase(phase: str) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, "-m", "tests.approval_process", phase], cwd=REPO,
-                          capture_output=True, text=True, timeout=120)
-
-
-def _outcome(proc: subprocess.CompletedProcess) -> dict:
-    lines = [line for line in proc.stdout.splitlines() if line.startswith("{")]
-    assert lines, proc.stderr[-3000:]
-    return json.loads(lines[-1])
-
-
 def rows(conn) -> dict[str, int]:
     return {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
             for t in ("tickets", "access_requests", "approvals")}
 
 
-def test_paused_thread_survives_a_killed_process_and_resumes_in_another(seeded, conn):
-    """Done-when of Milestone 4: kill between the pause and the decision, restart,
-    resume the same thread, release the write once, end blocked by the seat limit.
-    A replay after the release returns AR001 again and adds no row."""
-    before = rows(conn)
-    first = _phase("start")
-    assert first.returncode == -signal.SIGKILL, first.stderr[-3000:]
-    paused = _outcome(first)
-    assert paused["status"] == "pending" and paused["approval_id"] == "AP001"
-    assert paused["approvals"] == ["AP001", "AP002"]
-    assert paused["tools_called"][0] == "get_employee"  # the subject lookup, from code
-    assert "granted" not in paused["answer"].replace("no access is granted", "")
-    assert rows(conn) == before
+# The durability scenarios live in evals/durability.py; these tests run them on the
+# temporary database and checkpoint file the fixtures set up.
 
-    second = _phase("resume")
-    assert second.returncode == 0, second.stderr[-3000:]
-    resumed = _outcome(second)
-    assert resumed["request_id"] == paused["request_id"]
-    assert resumed["trace_id"] == paused["trace_id"]
-    assert resumed["status"] == "blocked"
-    assert resumed["tools_called"].count("create_access_request") == 1
-    decision = resumed["access_decision"]
-    assert decision["status"] == "blocked" and "42 active seats" in decision["blocking_reason"]
-    write = [a for a in decision["actions_taken"] if a["tool"] == "create_access_request"]
-    assert [(a["record_id"], a["reused"]) for a in write] == [("AR001", True)]
-    assert rows(conn) == before
-    control = conn.execute("SELECT requested_by, workflow_request_id, decided_by, consumed_key "
-                           "FROM approval_controls WHERE approval_id = 'AP001'").fetchone()
-    assert tuple(control[:3]) == ("E010", paused["request_id"], "E006")
-    assert control[3] == "create_access_request:E010:S001:REQ-RACHEL"
-
-    third = _phase("replay")
-    assert third.returncode == 0, third.stderr[-3000:]
-    replayed = _outcome(third)
-    assert replayed["status"] == "blocked" and replayed["approvals"][0] == "AP001"
-    write = [a for a in replayed["access_decision"]["actions_taken"]
-             if a["tool"] == "create_access_request"]
-    assert [(a["record_id"], a["reused"]) for a in write] == [("AR001", True)]
-    assert rows(conn) == before
-    assert conn.execute("SELECT COUNT(*) FROM approval_controls WHERE approval_id = 'AP001' "
-                        "AND consumed_at IS NOT NULL").fetchone()[0] == 1
+def _assert_scenario(result: dict) -> None:
+    failed = [check for check, ok in result["checks"].items() if not ok]
+    assert not failed, failed
 
 
-async def test_paused_thread_rejects_a_different_request_id(seeded, monkeypatch):
+async def test_paused_thread_survives_a_killed_process_and_resumes_in_another(seeded):
+    """Kill between the pause and the decision, restart, resume the same thread, release
+    the write once, end blocked by the seat limit."""
+    result = await durability.restart()
+    _assert_scenario(result)
+    from mcp_server import db
+    with db.session() as conn:  # the scenario reseeded the file, so open it again
+        control = conn.execute("SELECT requested_by, workflow_request_id, decided_by, consumed_key "
+                               "FROM approval_controls WHERE approval_id = 'AP001'").fetchone()
+    assert tuple(control[:3]) == ("E010", result["request_id"], "E006")
+    assert control[3] == f"create_access_request:E010:S001:{result['request_id']}"
+
+
+async def test_a_replayed_request_adds_no_row_and_consumes_the_approval_once(seeded):
+    _assert_scenario(await durability.replay())
+
+
+async def test_the_gate_opens_only_on_a_recorded_approval(seeded):
+    _assert_scenario(await durability.gate())
+
+
+async def test_a_recorded_decision_resumes_the_paused_trace(seeded):
+    _assert_scenario(await durability.resume())
+
+
+async def test_a_resume_after_the_decision_rejects_a_different_request_id(seeded, monkeypatch):
     use_stubs(monkeypatch, ScriptedPlanner(LOOKUP, GO_AHEAD),
               ScriptedModel(*lookup_replies(), call("get_approvals", record_id="AR001"),
                             say("Waits on AP001.")))
@@ -131,32 +106,57 @@ async def test_paused_thread_rejects_a_different_request_id(seeded, monkeypatch)
     paused = await run_turn("Go ahead.", caller_id="E007", user_group="UG_IT",
                             thread_id="t-mismatch", request_id="REQ-1")
     assert paused.status == "pending"
+    decide("AP001", "approved", "E006", "t-mismatch")
     with pytest.raises(RequestIdMismatch):
         await run_turn("Approved?", caller_id="E007", user_group="UG_IT",
                        thread_id="t-mismatch", request_id="REQ-2")
 
 
-async def test_resume_while_still_undecided_stays_pending(seeded, monkeypatch, conn):
-    use_stubs(monkeypatch, ScriptedPlanner(LOOKUP, GO_AHEAD),
-              ScriptedModel(*lookup_replies(), call("get_approvals", record_id="AR001"),
-                            say("Waits on AP001.")))
+async def test_a_message_while_undecided_is_a_normal_turn_and_the_thread_stays_paused(
+        seeded, monkeypatch, conn):
+    """The user's rule: while no decision is recorded, a new message is handled as a
+    normal turn with its own request_id and status, and the approval stays pending.
+    The resume happens only after a recorded decision, under the pausing request_id."""
+    from agent.graph import build_graph
+    from agent.run import open_checkpointer
+    model = ScriptedModel(*lookup_replies(), call("get_approvals", record_id="AR001"),
+                          say("Waits on AP001."),
+                          *lookup_replies(),
+                          call("create_access_request", employee_id="E010", software="Webex",
+                               business_justification="Customer onboarding calls."))
+    use_stubs(monkeypatch, ScriptedPlanner(LOOKUP, GO_AHEAD, LOOKUP), model)
     await look_up_rachel("t-wait")
-    first = await run_turn("Go ahead.", caller_id="E007", user_group="UG_IT", thread_id="t-wait")
-    again = await run_turn("Is it done?", caller_id="E007", user_group="UG_IT", thread_id="t-wait")
-    assert first.status == again.status == "pending"
-    assert again.request_id == first.request_id
+    first = await run_turn("Go ahead.", caller_id="E007", user_group="UG_IT", thread_id="t-wait",
+                           request_id="REQ-PAUSE")
+    other = await run_turn("Who is Rachel Stein again?", caller_id="E007", user_group="UG_IT",
+                           thread_id="t-wait", request_id="REQ-OTHER")
+    assert first.status == "pending"
+    assert other.request_id == "REQ-OTHER" and other.intent == "employee_lookup"
+    assert other.status == "completed" and other.approval_id is None
+    assert other.tools_called == ["get_employee"]  # this turn's tools only
     assert conn.execute("SELECT status FROM approvals WHERE approval_id = 'AP001'").fetchone()[0] \
         == "needed"
+    async with open_checkpointer() as saver:
+        state = await build_graph(None, [], saver, model=None, planner=None).aget_state(
+            {"configurable": {"thread_id": "t-wait"}})
+    assert state.next == ("await_approval",)  # still paused on AP001
+    assert state.values["awaiting"]["request_id"] == "REQ-PAUSE"
+
+    decide("AP001", "approved", "E006", "t-wait")
+    resumed = await run_turn("E006 approved it.", caller_id="E007", user_group="UG_IT",
+                             thread_id="t-wait")
+    assert resumed.request_id == "REQ-PAUSE" and resumed.trace_id == first.trace_id
+    assert resumed.tools_called == ["create_access_request"]  # not the pausing turn's reads
+    assert resumed.status == "blocked"
 
 
 async def test_rejected_approval_ends_blocked_without_a_write(seeded, monkeypatch, conn):
-    from mcp_server.writes import record_approval_decision
     use_stubs(monkeypatch, ScriptedPlanner(LOOKUP, GO_AHEAD),
               ScriptedModel(*lookup_replies(), call("get_approvals", record_id="AR001"),
                             say("Waits on AP001.")))
     await look_up_rachel("t-reject")
     await run_turn("Go ahead.", caller_id="E007", user_group="UG_IT", thread_id="t-reject")
-    record_approval_decision("AP001", "rejected", "E006", reason="No seats this quarter.")
+    decide("AP001", "rejected", "E006", "t-reject", reason="No seats this quarter.")
     out = await run_turn("Well?", caller_id="E007", user_group="UG_IT", thread_id="t-reject")
     assert out.status == "blocked" and "Nothing was filed" in out.answer
     assert "create_access_request" not in out.tools_called

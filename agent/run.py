@@ -2,10 +2,12 @@
 
 It opens the durable checkpointer and the MCP session, builds the graph (agent/graph.py)
 with them, and runs one turn on the thread. A thread paused on an approval is resumed
-instead of started: the decision is already in the `approvals` table, written by
-application code with `record_approval_decision`, and the graph's `write_gate` reads it.
+once the approval holds a decision, written by application code with
+`agent.approvals.decide()`; the graph's `write_gate` reads it. Until then a new message on
+the paused thread is a normal turn, and the thread stays paused on the same approval.
 
 Tracing comes from Lesson 11 `02-instrument-agent/run.py`: one root span per turn,
+whose node spans and generations come from the graph itself (agent/tracing.py),
 `propagate_attributes` with `session_id` = thread id and `user_id` = caller id, and a
 flush in `finally`, because Langfuse exports on a background thread and a script that
 exits first exports nothing. A resumed turn opens its root span in the trace of the
@@ -20,18 +22,20 @@ from langfuse import get_client, propagate_attributes
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 
-from agent import config
+from agent import config, heuristics
+from agent.approvals import is_decided
 from agent.graph import build_graph
 from agent.mcp_tools import list_tool_specs, mcp_session
 from agent.model import get_model
 from agent.graph import current_turn
 from agent.memory import ConversationMemory
-from agent.outcome import STATUSES, TurnOutcome, pending_text, retrieved_sources
+from agent.outcome import STATUSES, TurnOutcome, calls_made, pending_text, retrieved_sources
 from agent.policy import TurnPlan
 from agent.ports import McpWebexPort, WebexPort
 from agent.records import checklist_tool, decision_tool
 from agent.schemas import CallerContext
 from agent.structured import ParseFailed
+from agent.tracing import trajectory
 
 # Each tool round is two graph steps; 6 calls, one rearm and the approval path fit well
 # inside this. Hitting it raises GraphRecursionError rather than looping on.
@@ -69,8 +73,8 @@ async def open_checkpointer():
         yield saver
 
 
-def _resolve_request_id(paused: bool, stored: str | None, passed: str | None) -> str:
-    if paused:
+def _resolve_request_id(resuming: bool, stored: str | None, passed: str | None) -> str:
+    if resuming:
         if passed and passed != stored:
             raise RequestIdMismatch(
                 f"Thread is paused under request {stored}; got {passed}. A resume keeps "
@@ -83,10 +87,13 @@ def _outcome(values: dict, interrupted: list, request_id: str, trace_id: str | N
     base = {"request_id": request_id, "trace_id": trace_id, "scope": values.get("scope"),
             "intent": values.get("intent"), "visible_tools": values.get("visible_tools", []),
             "tools_called": values.get("turn_tools", []),
+            "tool_calls": calls_made(current_turn(values.get("messages", []))),
             "sources": retrieved_sources(current_turn(values.get("messages", [])))}
-    if interrupted:
-        # The paused run's answer is the AccessDecision decide() rendered just before
-        # the pause; pending_text() covers a pause without one.
+    if interrupted and values.get("approval"):
+        # This turn asked for the approval and paused on it. Its answer is the
+        # AccessDecision decide() rendered just before the pause; pending_text() covers
+        # a pause without one. A later turn on the still-paused thread (no approval of
+        # its own) reports its own status below.
         approval = values["approval"]
         return TurnOutcome(answer=values.get("answer") or pending_text(approval),
                            citations=values.get("citations", []), status="pending",
@@ -116,16 +123,21 @@ async def run_turn(message: str, *, caller_id: str, user_group: str, thread_id: 
             # itself and not wrapped in the MCP session's task-group ExceptionGroup.
             probe = build_graph(None, [], saver, model=None, planner=None)
             snapshot = await probe.aget_state(thread)
-            paused = bool(snapshot.next)
-            request_id = _resolve_request_id(paused, snapshot.values.get("request_id"), request_id)
-            paused_trace = snapshot.values.get("trace_id") if paused else None
+            # A paused thread resumes only once its approval holds a recorded decision.
+            # Until then a new message is a normal turn, and the graph pauses on the
+            # same approval again after it (agent/graph.py `after_answer`).
+            waiting = snapshot.values.get("awaiting") if snapshot.next else None
+            resuming = bool(waiting) and is_decided(waiting["approval"]["approval_id"])
+            request_id = _resolve_request_id(resuming, (waiting or {}).get("request_id"),
+                                             request_id)
+            paused_trace = waiting.get("trace_id") if resuming else None
             configurable = {"thread_id": thread_id, "caller_id": caller_id,
                             "user_group": user_group, "request_id": request_id}
             async with mcp_session() as session:
                 graph = build_graph(session, await list_tool_specs(session), saver,
                                     **make_models(), port=make_port(session, configurable))
                 outcome = await _invoke(graph, thread, message, configurable=configurable,
-                                        paused=paused, paused_trace=paused_trace)
+                                        paused=resuming, paused_trace=paused_trace)
     finally:
         langfuse.flush()
     assert outcome.status in STATUSES
@@ -146,22 +158,28 @@ async def _invoke(graph, thread: dict, message: str, *, configurable: dict, paus
                 trace_context={"trace_id": paused_trace} if paused_trace else None) as root:
             trace_id = langfuse.get_current_trace_id()
             if paused:
+                # The turn's own tool list starts empty: the pausing turn's calls are in
+                # the thread, not in this turn's tools_called.
                 payload = Command(resume={"message": message},
-                                  update={"messages": [HumanMessage(message)]})
+                                  update={"messages": [HumanMessage(message)], "turn_tools": [],
+                                          "turn_errors": [], "cap_offset": 0})
             else:
                 payload = {"messages": [HumanMessage(message)],
                            "request_id": request_id, "trace_id": trace_id}
-            try:
-                result = await graph.ainvoke(payload, config={
-                    "configurable": configurable, "recursion_limit": RECURSION_LIMIT})
-            except ParseFailed as exc:
-                outcome = TurnOutcome(answer=f"I could not finish this turn: {exc}",
-                                      status="failed", request_id=request_id,
-                                      trace_id=trace_id)
-            else:
-                values = (await graph.aget_state(thread)).values
-                outcome = _outcome(values, result.get("__interrupt__") or [],
-                                   request_id, trace_id)
+            values: dict = {}
+            with heuristics.collect() as fired:
+                try:
+                    result = await graph.ainvoke(payload, config={
+                        "configurable": configurable, "recursion_limit": RECURSION_LIMIT})
+                except ParseFailed as exc:
+                    outcome = TurnOutcome(answer=f"I could not finish this turn: {exc}",
+                                          status="failed", request_id=request_id,
+                                          trace_id=trace_id)
+                else:
+                    values = (await graph.aget_state(thread)).values
+                    outcome = _outcome(values, result.get("__interrupt__") or [],
+                                       request_id, trace_id)
+            outcome.heuristics = list(fired)
             # Set before root.update, so the trace's own output carries the link too.
             # None when Langfuse is not configured (the client is then a no-op).
             outcome.trace_url = langfuse.get_trace_url(trace_id=trace_id)
@@ -180,5 +198,8 @@ async def _invoke(graph, thread: dict, message: str, *, configurable: dict, paus
                     "decision_status": (outcome.access_decision.status
                                         if outcome.access_decision else None),
                     "handoff_key": (outcome.handoff or {}).get("handoff", {}).get(
-                        "idempotency_key")})
+                        "idempotency_key"),
+                    "heuristics_fired": outcome.heuristics,
+                    # What the LLM judges read, through a jsonPath (evals/register_judges.py).
+                    "trajectory": trajectory(values, outcome)})
     return outcome

@@ -1,0 +1,19 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "InvokeNovaProForLangfuseJudgesOnly",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
+      ],
+      "Resource": [
+        "arn:aws:bedrock:us-east-1:835505307911:inference-profile/us.amazon.nova-pro-v1:0",
+        "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-pro-v1:0",
+        "arn:aws:bedrock:us-east-2::foundation-model/amazon.nova-pro-v1:0",
+        "arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-pro-v1:0"
+      ]
+    }
+  ]
+}
