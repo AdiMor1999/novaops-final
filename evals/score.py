@@ -212,14 +212,12 @@ async def run_sessions(ids: list[str]) -> dict:
         thread_id = f"{prefix}-{uuid.uuid4().hex[:8]}"
         caller_id, user_group = session_caller(session)
         print(f"\n== {session['id']}", flush=True)
-        turns, paused = [], False
+        turns = []
         for turn in session["turns"]:
-            # A thread paused on an approval resumes under the request_id it paused with
-            # (agent/CLAUDE.md), so the next turn passes none.
+            # No decision is recorded during a replay, so a turn after a pause (S4 turn
+            # 9) is a normal turn with its own request_id (agent/CLAUDE.md).
             outcome = await run_turn(turn["user"], caller_id=caller_id, user_group=user_group,
-                                     thread_id=thread_id,
-                                     request_id=None if paused else f"{prefix}-t{turn['n']}")
-            paused = outcome.status == "pending" and bool(outcome.approval_id)
+                                     thread_id=thread_id, request_id=f"{prefix}-t{turn['n']}")
             scored = score_session_turn(session["id"], turn, outcome)
             push_scores(outcome.trace_id, scored)
             turns.append({"n": turn["n"], "kind": turn.get("kind"), **scored,
