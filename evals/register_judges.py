@@ -119,68 +119,103 @@ def judge_name(rubric: str) -> str:
     return f"{rubric}_{VERSION}"
 
 
+PROVIDER: str | None = None  # set by --provider
+
+
 def connection() -> dict:
-    """The project's LLM connection that exposes the judge model. Langfuse runs the
-    judges with it; JUDGE_MODEL_ID only names which model to ask for."""
+    """The LLM connection that exposes the judge model. Langfuse runs the judges with
+    it; JUDGE_MODEL_ID only names which model to ask for. An organization-level
+    connection is not in the project's connection listing, so `--provider` names it
+    (`bedrock-judge`), and Langfuse refuses the evaluator if it cannot resolve it."""
     model = config.judge_model_id()
+    if PROVIDER:
+        return {"provider": PROVIDER, "model": model}
     for found in get_client().api.llm_connections.list(limit=50).data:
         if model in (found.custom_models or []):
-            return {"provider": found.provider, "model": model,
-                    "modelParams": {"temperature": 0}}
-    raise SystemExit(f"No Langfuse LLM connection lists {model} as a custom model. Create "
-                     "the Bedrock connection with the judge IAM user first.")
+            return {"provider": found.provider, "model": model}
+    raise SystemExit(f"No project LLM connection lists {model} as a custom model. Pass "
+                     "--provider <connection name> for an organization connection.")
 
 
 def evaluator_payload(rubric: str, model_config: dict | None) -> dict:
+    """The v2 evaluator: prompt, model, variable mapping and a NUMERIC 0..1 output."""
     payload = {
         "type": "llm_as_judge",
         "name": judge_name(rubric),
+        "description": f"{rubric}, rubric {VERSION}, evals/register_judges.py",
         "prompt": RUBRICS[rubric],
-        "outputDefinition": {
-            "dataType": "NUMERIC",
-            "score": {"description": "0.0 (worst) to 1.0 (best), per the rubric."},
-            "reasoning": {"description": "At most two sentences naming the claim or label "
-                                         "behind the score."},
+        "variable_mapping": MAPPING,
+        "output_definition": {
+            "data_type": "NUMERIC", "min_value": 0.0, "max_value": 1.0,
+            "score_value_instructions": "0.0 (worst) to 1.0 (best), in steps of 0.1, per "
+                                        "the rubric.",
+            "score_reasoning_instructions": "At most two sentences naming the claim or "
+                                            "label behind the score.",
         },
     }
     if model_config:
-        payload["modelConfig"] = model_config
+        payload["model_config"] = {"provider": model_config["provider"],
+                                   "model": model_config["model"]}
     return payload
 
 
-def rule_payload(rubric: str, enabled: bool, tags: list[str]) -> dict:
-    return {
-        "name": judge_name(rubric),
-        "evaluator": {"type": "llm_as_judge", "name": judge_name(rubric), "scope": "project"},
-        "target": "observation",
-        "enabled": enabled,
-        "sampling": SAMPLING,
-        "filter": [
-            {"type": "stringOptions", "column": "type", "operator": "any of",
+def rule_filter(tags: list[str]) -> list[dict]:
+    """The root `turn` span of a tagged trace: one judgement per turn. `isRootObservation`
+    is not used, because a resumed turn's span has a parent id (agent/run.py)."""
+    return [{"type": "stringOptions", "column": "type", "operator": "any of",
              "value": ["AGENT"]},
-            {"type": "arrayOptions", "column": "tags", "operator": "any of", "value": tags},
-        ],
-        "mapping": MAPPING,
-    }
+            {"type": "stringOptions", "column": "name", "operator": "any of", "value": ["turn"]},
+            {"type": "arrayOptions", "column": "tags", "operator": "any of", "value": tags}]
 
 
-def _raw(method: str, path: str, payload: dict | None = None) -> dict:
-    """The evaluator and rule endpoints through the SDK's HTTP client, so the payload
-    shape is exactly Lesson 11's."""
-    client = get_client().api._client_wrapper.httpx_client
-    response = client.request(f"api/public/unstable{path}", method=method, json=payload)
-    if response.status_code >= 400:
-        raise SystemExit(f"Langfuse {method} {path} failed ({response.status_code}): "
-                         f"{response.text[:500]}")
-    return response.json() if response.content else {}
+def rule_payload(rubric: str, enabled: bool, tags: list[str],
+                 evaluator_id: str = "<evaluator id>") -> dict:
+    return {"name": judge_name(rubric), "enabled": enabled, "sampling": SAMPLING,
+            "filter": rule_filter(tags),
+            "evaluator_assignments": [{"evaluator_id": evaluator_id,
+                                       "variable_mapping": MAPPING}]}
 
 
-def _items(path: str) -> list[dict]:
-    return _raw("GET", f"{path}?limit=100").get("data", [])
+def _api():
+    return get_client().api
 
 
-def _by_name(path: str, name: str) -> dict | None:
-    return next((item for item in _items(path) if item.get("name") == name), None)
+def _all(listing) -> list:
+    return list(listing(limit=100).data)
+
+
+def _named(listing, name: str):
+    return next((item for item in _all(listing) if item.name == name), None)
+
+
+def _mapping_models(mapping: list[dict]) -> list:
+    from langfuse.api.evaluation_commons.types import PromptVariableMappingInput
+    # A null jsonPath is refused; a mapping without one sends no such key.
+    return [PromptVariableMappingInput(variable=m["variable"], source=m["source"],
+                                       **({"json_path": m["jsonPath"]} if "jsonPath" in m
+                                          else {})) for m in mapping]
+
+
+def create_evaluator(rubric: str, model_config: dict):
+    from langfuse.api.evaluation_commons.types import EvaluatorOutputDefinition_Numeric
+    from langfuse.api.evaluators.types import (CreateEvaluatorRequest_LlmAsJudge,
+                                               EvaluatorModelConfig)
+    payload = evaluator_payload(rubric, model_config)
+    request = CreateEvaluatorRequest_LlmAsJudge(
+        name=payload["name"], description=payload["description"], prompt=payload["prompt"],
+        model_config_=EvaluatorModelConfig(**payload["model_config"]),
+        variable_mapping=_mapping_models(MAPPING),
+        output_definition=EvaluatorOutputDefinition_Numeric(
+            **{k: v for k, v in payload["output_definition"].items() if k != "data_type"}))
+    return _api().evaluators.create(request=request)
+
+
+def create_rule(name: str, evaluator_id: str, enabled: bool, tags: list[str]):
+    from langfuse.api.evaluation_rules.types import EvaluationRuleEvaluatorAssignmentInput
+    return _api().evaluation_rules.create(
+        name=name, enabled=enabled, sampling=SAMPLING, filter=rule_filter(tags),
+        evaluator_assignments=[EvaluationRuleEvaluatorAssignmentInput(
+            evaluator_id=evaluator_id, variable_mapping=_mapping_models(MAPPING))])
 
 
 def register(enable: bool, tags: list[str] = TAGS, rubrics=tuple(RUBRICS)) -> None:
@@ -188,52 +223,53 @@ def register(enable: bool, tags: list[str] = TAGS, rubrics=tuple(RUBRICS)) -> No
     print(f"[model  ] {model_config['provider']} / {model_config['model']}")
     for rubric in rubrics:
         name = judge_name(rubric)
-        if _by_name("/evaluators", name):
+        evaluator = _named(_api().evaluators.list, name)
+        if evaluator:
             print(f"[exists ] evaluator {name}")
         else:
-            _raw("POST", "/evaluators", evaluator_payload(rubric, model_config))
+            evaluator = create_evaluator(rubric, model_config)
             print(f"[created] evaluator {name}")
-        rule = _by_name("/evaluation-rules", name)
+        rule = _named(_api().evaluation_rules.list, name)
         if rule is None:
-            _raw("POST", "/evaluation-rules", rule_payload(rubric, enable, tags))
+            create_rule(name, evaluator.id, enable, tags)
             print(f"[created] rule      {name} ({'enabled' if enable else 'PAUSED'}, tags {tags})")
-        elif enable and not rule.get("enabled"):
-            _raw("PATCH", f"/evaluation-rules/{rule['id']}", {"enabled": True})
+        elif enable and not rule.enabled:
+            _api().evaluation_rules.update(rule.id, enabled=True)
             print(f"[enabled] rule      {name}")
         else:
-            print(f"[exists ] rule      {name} (enabled={rule.get('enabled')})")
+            print(f"[exists ] rule      {name} (enabled={rule.enabled})")
 
 
 def delete(rubrics=tuple(RUBRICS)) -> None:
     for rubric in rubrics:
         name = judge_name(rubric)
-        for path in ("/evaluation-rules", "/evaluators"):
-            found = _by_name(path, name)
-            if found:
-                _raw("DELETE", f"{path}/{found['id']}")
-                print(f"[deleted] {path[1:]:<17} {name}")
+        for rule in [r for r in _all(_api().evaluation_rules.list) if r.name.startswith(name)]:
+            _api().evaluation_rules.delete(rule.id)
+            print(f"[deleted] rule      {rule.name}")
+        if evaluator := _named(_api().evaluators.list, name):
+            _api().evaluators.delete(evaluator.id)
+            print(f"[deleted] evaluator {name}")
 
 
 def test() -> int:
     """One judgement through the connection. A temporary rule fires only on
-    `eval:judge-test`; one stubbed turn carries that tag; the access judge's score
-    must appear on it with a reason. The rule is removed afterwards. Cost: one turn's
-    trace and one judge run."""
+    `eval:judge-test`; one stubbed turn carries that tag; the access judge's score must
+    appear on it with a reason. The rule is removed afterwards; the evaluator stays.
+    Cost: one turn's trace and one judge run."""
     import asyncio
     import os
     os.environ["LANGFUSE_TRACING_ENABLED"] = "true"
+    from langfuse import propagate_attributes
     from evals import durability
     from scripts.reseed import reseed
     rubric = "access_overclaim"
-    payload = rule_payload(rubric, True, [TEST_TAG])
-    payload["name"] = f"{judge_name(rubric)}_test"
     model_config = connection()
-    if not _by_name("/evaluators", judge_name(rubric)):
-        _raw("POST", "/evaluators", evaluator_payload(rubric, model_config))
-    rule = _raw("POST", "/evaluation-rules", payload)
+    evaluator = _named(_api().evaluators.list, judge_name(rubric)) \
+        or create_evaluator(rubric, model_config)
+    print(f"[model  ] {model_config['provider']} / {model_config['model']}")
+    rule = create_rule(f"{judge_name(rubric)}_test", evaluator.id, True, [TEST_TAG])
     try:
         reseed(config.db_path())
-        from langfuse import propagate_attributes
 
         async def one_turn():
             with propagate_attributes(tags=[TEST_TAG]):
@@ -241,20 +277,21 @@ def test() -> int:
                                              f"judge-test-{int(time.time())}")
         outcome = asyncio.run(one_turn())
         get_client().flush()
-        print(f"[turn   ] {outcome.status} trace {outcome.trace_url}")
+        print(f"[turn   ] {outcome.status} {outcome.trace_url}")
         for _ in range(24):
-            scores = get_client().api.scores_v3.get_many_v3(trace_id=outcome.trace_id).data
-            found = [s for s in scores if s.name.startswith(judge_name(rubric))]
+            scores = _api().scores_v3.get_many_v3(trace_id=outcome.trace_id,
+                                                  fields="core,details").data
+            found = [sc for sc in scores if sc.name.startswith(judge_name(rubric))]
             if found:
                 print(f"[score  ] {found[0].name} = {found[0].value}: {found[0].comment}")
                 return 0
             time.sleep(10)
-        print("[missing] no judge score after four minutes; check the evaluator's "
-              "execution log in Langfuse")
+        print("[missing] no judge score after four minutes; see the evaluator's execution "
+              "log in Langfuse")
         return 1
     finally:
-        _raw("DELETE", f"/evaluation-rules/{rule['id']}")
-        print(f"[deleted] test rule {payload['name']}")
+        _api().evaluation_rules.delete(rule.id)
+        print(f"[deleted] test rule {rule.name}")
 
 
 def main() -> int:
@@ -263,7 +300,10 @@ def main() -> int:
     parser.add_argument("--enable", action="store_true")
     parser.add_argument("--delete", action="store_true")
     parser.add_argument("--test", action="store_true")
+    parser.add_argument("--provider", help="LLM connection name, e.g. bedrock-judge")
     args = parser.parse_args()
+    global PROVIDER
+    PROVIDER = args.provider
     if args.dry_run:
         print(json.dumps({judge_name(r): {"evaluator": evaluator_payload(r, None),
                                           "rule": rule_payload(r, args.enable, TAGS)}

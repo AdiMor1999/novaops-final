@@ -429,6 +429,26 @@ def selftest() -> int:
     return 1 if failures else 0
 
 
+# What decides a turn's outcome: comparing two runs is fair only when these match.
+AGENT_CODE = ("agent", "mcp_server", "scripts/reseed.py", "evals/score.py",
+              "evals/conversation_checks.py", "evals/session_checks.py", "evals/tool_map.py",
+              "evals/run_session.py", "evals/webex_cases.py")
+
+
+def agent_code() -> str:
+    """A hash of every .py file under AGENT_CODE, read from the code this process runs
+    (a frozen copy for ablations and baselines), so results files can be compared."""
+    import hashlib
+    root = Path(__file__).resolve().parents[1]
+    digest = hashlib.sha256()
+    for entry in AGENT_CODE:
+        path = root / entry
+        for file in sorted([path] if path.is_file() else path.rglob("*.py")):
+            digest.update(str(file.relative_to(root)).encode())
+            digest.update(file.read_bytes())
+    return digest.hexdigest()[:12]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--selftest", action="store_true")
@@ -444,7 +464,8 @@ def main() -> int:
     os.environ["LANGFUSE_TRACING_ENABLED"] = "true" if args.trace else "false"
     report = asyncio.run(run(args.parts, args.sessions, args.tag))
     report["_meta"] = {"parts": args.parts, "traced": args.trace, "tag": args.tag,
-                       "heuristics_off": os.environ.get("NOVAOPS_HEURISTICS_OFF", "")}
+                       "heuristics_off": os.environ.get("NOVAOPS_HEURISTICS_OFF", ""),
+                       "agent_code": agent_code()}
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         Path(args.out).write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")

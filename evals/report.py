@@ -130,7 +130,20 @@ def citation_split(baselines: list) -> list[str]:
     return lines + [""]
 
 
+# The ablation files were written before score.py recorded `agent_code`. Their agent,
+# server and scoring files are those of commit 05e882b, whose hash this is (checked by
+# hashing a `git archive 05e882b` copy with evals.score.agent_code()).
+ABLATION_CODE = "4be5448af0f4"
+
+
+def code_of(report: dict) -> str:
+    return report.get("_meta", {}).get("agent_code") or ABLATION_CODE
+
+
 def heuristics(baselines: list) -> list[str]:
+    if mismatched := sorted({code_of(r) for _, r in baselines} - {ABLATION_CODE}):
+        return ["## Heuristics", "", f"Not compared: the baselines ran on agent code "
+                f"{mismatched}, the ablations on {ABLATION_CODE}. Rerun one side.", ""]
     turns = [t for _, r in baselines for ts in session_turns(r).values() for t in ts]
     base_ok, base_n = binding_rate(turns)
     lines = ["## Heuristics: how often each fires, and what changes without it", "",
